@@ -51,21 +51,18 @@ Core\WorldMap.lua
 Core\LFD.lua
 
 # --- Encounter Journal (original load order) ---
+# Assets.lua = BLP registration + preload, the chrome texcoord slices (was Slices.lua) and the BossesGen
+# portrait overrides (was the tail of vanilla_data.lua; the DATA patch runs at PLAYER_LOGIN).
 EncounterJournal\Assets.lua
-EncounterJournal\Slices.lua
-# Boss / loot / ability data — ONE consolidated file per expansion. vanilla creates
+# Boss / loot / model data — ONE consolidated file per expansion. vanilla creates
 # EJ.ej.DATA; tbc + wotlk append (wotlk must load last, it replaces colliding Classic ids).
 EncounterJournal\vanilla_data.lua
 EncounterJournal\tbc_data.lua
-# tbc_abilities.lua = OVERLAY of hand-seeded ability sections for the 8 Burning Crusade RAIDS (retail
-# never authored journal sections for them), from DragonUI_NewEra's AbilitiesTBC.lua, keyed by the
-# same DB2 encounter ids. Fills only section-less encounters; must load AFTER tbc_data.lua.
-EncounterJournal\tbc_abilities.lua
 EncounterJournal\wotlk_data.lua
-# wotlk_abilities.lua = OVERLAY of hand-seeded ability sections for the WotLK RAID bosses the DB2
-# extract has none for (Naxx/VoA/OS/EoE/ToC/Onyxia/ICC/RS/Algalon), re-keyed from DragonUI_NewEra's
-# AbilitiesWotLK.lua. Fills only section-less encounters; must load AFTER wotlk_data.lua.
-EncounterJournal\wotlk_abilities.lua
+# abilities_seed.lua = OVERLAY of hand-seeded ability sections for the encounters the DB2 extract has none
+# for: Classic dungeons/raids (was the AbilitiesEra part of vanilla_data.lua), the 8 BC raids (was
+# tbc_abilities.lua) and the WotLK raids + Ulduar (was wotlk_abilities.lua). One apply pass; after all data.
+EncounterJournal\abilities_seed.lua
 # loot_diff.lua = OVERLAY of difficulty masks the DB2 extract left undifferentiated (Ulduar 10/25,
 # TBC dungeons Normal/Heroic), from NewEra's AtlasLoot tags. Loads after every *_data.lua.
 EncounterJournal\loot_diff.lua
@@ -85,13 +82,11 @@ EncounterJournal\worldmap_ids.lua
 # re-created over EJ.ej.DATA for retail-era addon code (Details!, DetailsFramework, tooltip hooks).
 EncounterJournal\EJApi.lua
 EncounterJournal\ModelCam.lua
-EncounterJournal\PortraitCam.lua
 EncounterJournal\EncounterJournal.lua
 EncounterJournal\EncounterPage.lua
-# Search.lua = deep search (instances/bosses/abilities/loot) behind the navbar search box;
-# must load before NavBar.lua only for readability — the wiring is runtime-guarded.
+# Search.lua = deep search (instances/bosses/abilities/loot) behind the navbar search box, plus the
+# navbar + search-box wiring itself (BuildNavBar / RefreshNavBar; was NavBar.lua).
 EncounterJournal\Search.lua
-EncounterJournal\NavBar.lua
 
 # --- Key bindings (registers TOGGLEENCOUNTERJOURNAL; labels live in Core/Core.lua) ---
 Bindings.xml

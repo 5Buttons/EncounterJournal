@@ -13,7 +13,7 @@
 -- 3.3.5a has NO NavBarTemplate / NavButtonTemplate (Cata+ FrameXML; ClassicAPI doesn't ship them),
 -- so both skins are built from plain Buttons + textures here.
 --
--- USAGE (unchanged across skins — the EncounterJournal/NavBar.lua consumer doesn't branch):
+-- USAGE (unchanged across skins — the EncounterJournal/Search.lua consumer doesn't branch):
 --   local navBar = EJ.navbar.Build(parent, {
 --     name = "EJ_FooNavBar", home = { name = HOME, OnClick = fn }, strata = , frameLevel = ,
 --   })

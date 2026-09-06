@@ -1,4 +1,4 @@
--- Addon/Core/LFD.lua — "Find Group" bridge into the 3.3.5 Dungeon Finder (ROADMAP R7).
+-- Addon/Core/LFD.lua — "Find Group" bridge into the 3.3.5 Dungeon Finder.
 --
 -- Retail's journal has no queue button for old dungeons, but 3.3.5 DOES have a native LFD
 -- system covering classic/TBC/WotLK dungeons — a genuinely useful 3.3.5-only addition. We map

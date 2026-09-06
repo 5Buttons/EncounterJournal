@@ -83,7 +83,7 @@ local function buildLorePanel(enc)
   EJ.tooltip.Wire(map, ENCOUNTER_JOURNAL_SHOW_MAP or "Show Map")
   p.mapButton = map
 
-  -- "Find Group" (ROADMAP R7, 3.3.5-native — retail has no queue button for old dungeons):
+  -- "Find Group" (3.3.5-native — retail has no queue button for old dungeons):
   -- opens the Dungeon Finder in Specific mode with this dungeon ticked (Core/LFD.lua). The
   -- static LFD eye + label, right of the Show-Map row; PopulateEncounter shows it only for
   -- queueable dungeons (never raids).
@@ -234,7 +234,7 @@ local function buildInfoPanel(enc)
     if p.lootFilterClear then p.lootFilterClear:Hide() end
   end
 
-  -- ENCOUNTER-PAGE difficulty dropdown (ROADMAP R2). One selector for the whole page: filters
+  -- ENCOUNTER-PAGE difficulty dropdown. One selector for the whole page: filters
   -- the loot rows by bucket AND hides/shows Heroic-flagged ability sections. refreshView owns
   -- the bucket list (per-instance union, EJ.ej.InstanceDiffBuckets), the default selection,
   -- the anchor and the visibility (Loot tab + boss Abilities pages, only when ≥2 buckets).
@@ -483,7 +483,7 @@ local function buildInfoPanel(enc)
     fr:SetScript("OnMouseWheel", wheel)
   end
 
-  -- Multi-creature switcher (ROADMAP R4): council-style bosses carry creatures[2..n]; retail
+  -- Multi-creature switcher: council-style bosses carry creatures[2..n]; retail
   -- shows one portrait button per creature that swaps the displayed model. Our portrait = the
   -- LEFT half of the shipped creature plate (creature.file — the bust sits there), stacked down
   -- the model area's left edge. Only shown when a boss has 2+ displayable creatures. The
@@ -786,7 +786,7 @@ EJ.ej.DIFF_LABEL = {
 local HEROIC_BUCKET = { [2] = true, [5] = true, [6] = true }   -- 5-man Heroic / 10H / 25H
 
 -- Difficulty buckets for a whole INSTANCE (union of its encounters' loot `diff` masks), cached
--- on the instance table. The difficulty selector is per-instance like retail's (ROADMAP R2) —
+-- on the instance table. The difficulty selector is per-instance like retail's —
 -- stable across bosses, so a loot-less boss still offers the instance's difficulties, and the
 -- selection can't get reset by walking the boss list. Vanilla instances (all diff==0) return
 -- {} → no selector.
@@ -922,7 +922,7 @@ local function renderLoot(boss, preserveScroll)
   -- Remember the list currently shown so the on-demand repaints (loadLootItem / warmLoot) re-render
   -- THIS view as items resolve — both the boss page and the instance-landing aggregate.
   info.lootSource = items
-  -- Difficulty selection is ENCOUNTER-PAGE-WIDE (ROADMAP R2): refreshView owns the bucket list
+  -- Difficulty selection is ENCOUNTER-PAGE-WIDE: refreshView owns the bucket list
   -- (per-instance via EJ.ej.InstanceDiffBuckets), the selection default and the dropdown
   -- visibility, BEFORE dispatching here. This renderer only applies the per-row filter.
   -- Class filter: re-anchor (left of the difficulty filter when it's shown, else the slot filter
@@ -1800,7 +1800,7 @@ local function refreshView()
   if info.lootFilterClear then   -- clear badge only when there is something to clear
     info.lootFilterClear:SetShown(tab == 2 and (info.lootSlot or "ALL") ~= "ALL")
   end
-  -- ONE difficulty selector for the whole encounter page (ROADMAP R2). Buckets come from the
+  -- ONE difficulty selector for the whole encounter page. Buckets come from the
   -- INSTANCE (cached union of its loot diff masks); the selection drives BOTH the loot bucket
   -- filter (renderLoot) and the Heroic ability sections (renderSections). Shown on Loot always
   -- and on a BOSS's Abilities page; hidden on the lore landing, the Model tab, and whenever the

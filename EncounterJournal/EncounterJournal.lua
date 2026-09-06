@@ -1,7 +1,7 @@
 -- Addon/EncounterJournal/EncounterJournal.lua — the EJ_EncounterJournal window shell. Builds the
 -- journal window chrome + the instance-select grid (Dungeons/Raids tabs, expansion-tier
 -- selector, search). The encounter view (boss list, ability/loot/model tabs) lives in
--- EncounterPage.lua; the breadcrumb navbar in NavBar.lua.
+-- EncounterPage.lua; the breadcrumb navbar + search box in Search.lua.
 --
 -- Layout transcribed from retail Cata Blizzard_EncounterJournal.xml:1190-1300
 -- (build 12.0.5.67451):
@@ -103,7 +103,7 @@ local function buildChrome(f)
   f.NineSlice = ns
 
   -- 2. Portrait — the pre-masked round journal icon (3.3.5 has no texture masking, so the round
-  -- illusion is baked into the TGA's alpha; see README "Known cosmetic gaps").
+  -- illusion is baked into the TGA's alpha; see README "How the chrome is built").
   local portrait = f:CreateTexture(nil, "ARTWORK")
   portrait:SetTexture(ART_EJ .. "ui-ej-portraiticon-round.tga")
   EJ.portrait.ApplyCutout(portrait, f, { size = 60, anchor = { "TOPLEFT", -4, 6 }, mask = false })
