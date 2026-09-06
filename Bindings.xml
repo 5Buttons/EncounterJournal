@@ -1,0 +1,12 @@
+<Bindings>
+	<!--
+	  Registers the TOGGLEENCOUNTERJOURNAL key binding so the journal has a bindable key on 3.3.5a
+	  (the client ships no EJ binding — the Encounter Journal is a Cata feature). The label string
+	  BINDING_NAME_TOGGLEENCOUNTERJOURNAL and the category header BINDING_HEADER_ENCOUNTERJOURNAL are defined
+	  in Core/Core.lua, so this shows up under "Encounter Journal" in the Key Bindings UI. The action calls
+	  the ToggleEncounterJournal() global the boot block creates at PLAYER_LOGIN.
+	-->
+	<Binding name="TOGGLEENCOUNTERJOURNAL" category="BINDING_HEADER_ENCOUNTERJOURNAL" runOnUp="false">
+		if ToggleEncounterJournal then ToggleEncounterJournal() end
+	</Binding>
+</Bindings>
