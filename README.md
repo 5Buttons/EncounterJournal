@@ -1,15 +1,10 @@
-# Encounter Journal for WotLK 3.3.5a
+# Encounter Journal for WotLK 3.3.5a ALPHA version
 
 A standalone Adventure Guide (Encounter Journal) for **Wrath of the Lich King 3.3.5a**: bosses,
 abilities, loot and 3D models for every Classic, Burning Crusade and Wrath dungeon and raid.
-3.3.5 shipped no Encounter Journal of its own (it is a Cataclysm feature); this one is ported
-from the New Era addon's journal module and runs on top of the **!!!ClassicAPI** compatibility
-library. Tested on an AzerothCore 3.3.5a realm.
 
-Status: runs in the client. Last full in-client verification by the owner was 2026-09-05; the
-chrome details, loot overlays, item names/icons, the retail-API shim and the file restructure
-that landed after that date are compile- and data-checked offline but not yet seen in the client
-(see Roadmap, item 1).
+
+ALPHA version with a lot of bugs.
 
 ## Install
 
@@ -31,8 +26,6 @@ the TOC, so the game will not load the journal without it. Pinned version: 1.22.
 - the book **micro button** on the main menu bar, next to the Main Menu button;
 - `/ej`, `/encounterjournal` or `/adventureguide`;
 - the key binding "Toggle Adventure Guide" under the *Encounter Journal* category.
-
-**The window** is draggable, remembers its position, and closes with Escape.
 
 | Command | Effect |
 |---|---|
