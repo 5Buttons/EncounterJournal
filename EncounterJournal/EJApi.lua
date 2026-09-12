@@ -12,9 +12,12 @@
 --     JournalEncounter id is returned in that slot too.
 --   * Difficulty ids are retail's: 1 Normal / 2 Heroic (5-man), 3 10N, 4 25N, 5 10H, 6 25H — the
 --     same numbers the loot `diff` bitmask bits use, so EJ_SetDifficulty filters loot like the window.
---   * EJ_GetInstanceForMap accepts a 3.3.5 WorldMapArea id (what GetCurrentMapAreaID returns —
---     translated via worldmap_ids.lua) as well as a Map.dbc id; dungeonAreaMapID returns the
---     WorldMapArea id (usable with SetMapByID), the 3.3.5 analogue of retail's uiMapID.
+--   * EJ_GetInstanceForMap takes what GetCurrentMapAreaID() returns — on 3.3.5 that is the
+--     WorldMapArea.dbc id + 1 (Blizzard's own 3.3.5 WorldMapFrame.lua calls
+--     SetMapByID(GetCurrentMapAreaID() - 1)) — and falls back to a Map.dbc id; worldmap_ids.lua holds
+--     the dbc ids. dungeonAreaMapID returns the raw WorldMapArea.dbc id, which is what SetMapByID
+--     takes here (the 3.3.5 analogue of retail's uiMapID) — so it is GetCurrentMapAreaID() - 1, not
+--     equal to it.
 --   * Texture returns are the shipped BLP paths (a raw FileDataID renders red here); an unshipped
 --     one is returned as the number, like retail would.
 --   * Loot rows resolve through GetItemInfo, else the baked name / item_info.lua fallbacks.
@@ -27,6 +30,10 @@ local S = { tier = nil, instance = nil, encounter = nil, difficulty = nil,
 
 -- Cata-era Map.dbc ids the DB2 rosters carry for revamped Classic dungeons; 3.3.5 uses the originals.
 local MAP_FIX = { [1004] = 189, [1007] = 289, [859] = 309 }   -- Scarlet Monastery, Scholomance, Zul'Gurub
+
+-- 3.3.5's GetCurrentMapAreaID() returns WorldMapArea.dbc id + 1, while SetMapByID() takes the dbc id
+-- (see worldmap_ids.lua). Subtracted from the id retail-style callers hand EJ_GetInstanceForMap.
+local WORLDMAP_GET_OFFSET = 1
 
 local TIER = {
   { name = EXPANSION_NAME0 or "Classic" },
@@ -69,7 +76,7 @@ local function index()
       return (a._ejOrder or 0) < (b._ejOrder or 0)
     end)
   end
-  mapToArea = {}
+  mapToArea = {}   -- Map.dbc id -> WorldMapArea.dbc id (what SetMapByID takes on 3.3.5)
   for area, map in pairs(EJ.ej.WORLDMAP_AREA_TO_MAP or {}) do
     if not mapToArea[map] then mapToArea[map] = area end
   end
@@ -127,17 +134,21 @@ function EJ_InstanceIsRaid()
   local inst = byInst[S.instance or 0]
   return inst and inst.isRaid and true or false
 end
--- mapID: a 3.3.5 WorldMapArea id (GetCurrentMapAreaID) or a Map.dbc id. Returns 0 when unknown.
+local function instanceForMapDbc(map)
+  if not map then return nil end
+  for _, inst in ipairs(instances()) do
+    if mapOf(inst) == map then return inst.id end
+  end
+end
+-- mapID: what GetCurrentMapAreaID() returns on this client (WorldMapArea.dbc id + 1 on 3.3.5) — the
+-- retail contract — else a Map.dbc id. The area reading goes first because the two id spaces overlap:
+-- GetCurrentMapAreaID() in the Forge of Souls is 602, and Map.dbc 602 is Halls of Lightning.
+-- Returns 0 when unknown.
 function EJ_GetInstanceForMap(mapID)
   index()
   if not mapID then return 0 end
-  local candidates = { mapID, EJ.ej.WORLDMAP_AREA_TO_MAP and EJ.ej.WORLDMAP_AREA_TO_MAP[mapID] }
-  for _, m in ipairs(candidates) do
-    for _, inst in ipairs(instances()) do
-      if mapOf(inst) == m then return inst.id end
-    end
-  end
-  return 0
+  local areaToMap = EJ.ej.WORLDMAP_AREA_TO_MAP or {}
+  return instanceForMapDbc(areaToMap[mapID - WORLDMAP_GET_OFFSET]) or instanceForMapDbc(mapID) or 0
 end
 -- Not a retail function; handy on 3.3.5 where GetRealZoneText is often all an addon has.
 function EJ_GetInstanceForZoneName(name)

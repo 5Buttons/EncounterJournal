@@ -102,7 +102,7 @@ backups) lives outside the game's scan path in `c:\Games\Chromiefresh\EncounterJ
 | `item_info.lua` | item id to name, quality and icon for every loot item, so rows render before the item is cached |
 | `ModelPaths.lua` | display id to model file (client DBCs), the untextured fallback |
 | `npc_ids.lua` | encounter id to npc ids for BC/WotLK (from DBM boss mods) |
-| `worldmap_ids.lua` | 3.3.5 WorldMapArea id to Map id, used by `EJApi.lua` |
+| `worldmap_ids.lua` | WorldMapArea.dbc id to Map.dbc id for the instance maps; `EJApi.lua` applies 3.3.5's off-by-one (GetCurrentMapAreaID = dbc + 1, SetMapByID = dbc) |
 | `EJApi.lua` | the retail journal API (`EJ_*` globals, `C_EncounterJournal`, `EncounterJournal_OpenJournal`) re-created over the data for retail-era addons such as Details!. The window itself never calls it |
 | `ModelCam.lua` | per-boss model camera defaults |
 | `EncounterJournal.lua` | window shell, chrome, instance grid, tabs, openers, slash commands |

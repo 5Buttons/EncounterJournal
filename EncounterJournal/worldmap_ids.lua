@@ -1,12 +1,23 @@
--- Addon/EncounterJournal/worldmap_ids.lua — 3.3.5 WorldMapArea id (GetCurrentMapAreaID) -> Map.dbc
--- id for the maps the journal's instances live on, read from this client's WorldMapArea.dbc
--- (enUS/patch-enUS-M.MPQ; scratchpad worldmap.py). GENERATED — regenerate rather than edit. Lets the retail-API
--- shim (EJApi.lua) answer EJ_GetInstanceForMap(GetCurrentMapAreaID()) the way retail addons expect.
+-- Addon/EncounterJournal/worldmap_ids.lua — WorldMapArea.dbc id -> Map.dbc id for the maps the journal's
+-- instances live on. Keys are the RAW WorldMapArea.dbc ids (the same numbers as the WorldMapAreaID list on
+-- warcraft.wiki.gg), values the instance's Map.dbc id (inst.mapID in the data files).
+--
+-- 3.3.5a's map API is off by one against the DBC, in both directions. Blizzard's own 3.3.5 FrameXML
+-- (WorldMapFrame.lua) uses WORLDMAP_WINTERGRASP_ID = 502 for DBC row 501 and calls
+-- SetMapByID(GetCurrentMapAreaID() - 1):
+--   GetCurrentMapAreaID()  returns  dbc id + 1     (The Nexus -> 521)
+--   SetMapByID(id)         expects  dbc id         (The Nexus -> 520)
+-- EJApi.lua does that translation (WORLDMAP_GET_OFFSET); keep this table in DBC ids so it can be checked
+-- against the wiki. In-game check: stand in The Nexus, open the map, /dump GetCurrentMapAreaID() -> 521.
+--
+-- Hand-maintained (the worldmap.py generator that read the client DBC is gone, see README). Originally
+-- read from a client carrying the WDM patch (github.com/Trimitor/WDM-patch, patch-enUS-M.MPQ).
 
 local EJ = _G.EJ
 EJ.ej = EJ.ej or {}
 
 EJ.ej.WORLDMAP_AREA_TO_MAP = {
+  -- ── Dungeon maps a stock 3.3.5a (build 12340) client ships ──────────────────────────────
   [520] = 576,  -- TheNexus (The Nexus)
   [521] = 595,  -- CoTStratholme (The Culling of Stratholme)
   [522] = 619,  -- Ahnkahet (Ahn'kahet: The Old Kingdom)
@@ -31,13 +42,18 @@ EJ.ej.WORLDMAP_AREA_TO_MAP = {
   [603] = 668,  -- HallsofReflection (Halls of Reflection)
   [604] = 631,  -- IcecrownCitadel (Icecrown Citadel)
   [609] = 724,  -- TheRubySanctum (The Ruby Sanctum)
+
+  -- ── Cataclysm-era dungeon maps: only present with the WDM patch (patch-enUS-M.MPQ) ──────
+  -- A stock client has no WorldMapArea rows above 609 for these instances: GetCurrentMapAreaID never
+  -- returns them there and SetMapByID on them does nothing, so the rows are harmless without the patch.
+  -- Scarlet Monastery, Scholomance, Zul'Gurub and Zul'Aman have no row yet (ids not verified).
   [680] = 389,  -- Ragefire (Ragefire Chasm)
   [686] = 209,  -- ZulFarrak (Zul'Farrak)
   [687] = 109,  -- TheTempleOfAtalHakkar (The Temple of Atal'hakkar)
-  [688] = 48,  -- BlackfathomDeeps (Blackfathom Deeps)
-  [690] = 34,  -- TheStockade (The Stockade)
-  [691] = 90,  -- Gnomeregan (Gnomeregan)
-  [692] = 70,  -- Uldaman (Uldaman)
+  [688] = 48,   -- BlackfathomDeeps (Blackfathom Deeps)
+  [690] = 34,   -- TheStockade (The Stockade)
+  [691] = 90,   -- Gnomeregan (Gnomeregan)
+  [692] = 70,   -- Uldaman (Uldaman)
   [696] = 409,  -- MoltenCore (Molten Core)
   [699] = 429,  -- DireMaul (Dire Maul - Capital Gardens)
   [704] = 230,  -- BlackrockDepths (Blackrock Depths)
@@ -58,13 +74,13 @@ EJ.ej.WORLDMAP_AREA_TO_MAP = {
   [732] = 557,  -- ManaTombs (Mana-Tombs)
   [733] = 269,  -- CoTTheBlackMorass (The Black Morass)
   [734] = 560,  -- CoTHillsbradFoothills (Old Hillsbrad Foothills)
-  [749] = 43,  -- WailingCaverns (Wailing Caverns)
+  [749] = 43,   -- WailingCaverns (Wailing Caverns)
   [750] = 349,  -- Maraudon (Maraudon)
   [755] = 469,  -- BlackwingLair (Blackwing Lair)
-  [756] = 36,  -- TheDeadmines (Deadmines)
+  [756] = 36,   -- TheDeadmines (Deadmines)
   [760] = 129,  -- RazorfenDowns (Razorfen Downs)
-  [761] = 47,  -- RazorfenKraul (Razorfen Kraul)
-  [764] = 33,  -- ShadowfangKeep (Shadowfang Keep)
+  [761] = 47,   -- RazorfenKraul (Razorfen Kraul)
+  [764] = 33,   -- ShadowfangKeep (Shadowfang Keep)
   [765] = 329,  -- Stratholme (Stratholme - Main Gate)
   [766] = 531,  -- AhnQiraj (Temple of Ahn'Qiraj)
   [775] = 534,  -- CoTMountHyjal (The Battle for Mount Hyjal)

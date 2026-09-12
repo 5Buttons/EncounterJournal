@@ -80,7 +80,15 @@ local C = {
   ovUp      = { 0.54296875, 0.62890625, 0.75781250, 0.99218750 },  -- overflow ▾ normal
   ovDown    = { 0.45312500, 0.53906250, 0.75781250, 0.99218750 },  -- overflow ▾ pushed
 }
-local NAV_H, ARROW_W, OVERLAP = 30, 21, -15
+local NAV_H, ARROW_W = 30, 21
+-- Per-button anchor offset for the NEXT crumb (retail `xoffset`, NavigationBar.xml OnLoad): only the
+-- HOME button (-15, its tapered cap art overlaps the next crumb) and the OVERFLOW ▾ (-18) pull the
+-- following crumb in. Plain NavButtons have NO xoffset (nil → 0): the next crumb starts exactly at
+-- their right edge and the 21px ">" joiner (anchored off that edge) draws over the next crumb's
+-- left 20px — which is why crumb labels sit at LEFT+20. Using -15 for every crumb (the old
+-- port) shifted every crumb after the first 15px left, hiding the label's first letters under
+-- the ">" and cutting the chain short (visible as soon as a boss crumb followed the instance).
+local HOME_XOFF, OVERFLOW_XOFF = -15, -18
 
 -- The ▾ menu-arrow sub-button (UI-SquareButton art) shown on crumbs that offer a jump list.
 local function makeMenuArrow(b)
@@ -141,6 +149,7 @@ local function buildClassicHome(navBar, opts)
   p:SetTexCoord(0.70312500 - off, 0.70312500, 0.25781250, 0.49218750)
   h:SetTexCoord(0.70312500 - off, 0.71312500, 0.50781250, 0.74218750)
   b:SetWidth(newWidth)
+  b._xoffset = HOME_XOFF
   b._home = opts.home
   b:SetScript("OnClick", function() if b._home and b._home.OnClick then b._home.OnClick() end end)
   return b
@@ -154,6 +163,7 @@ local function getOverflowButton(navBar)
   local n = b:CreateTexture(nil, "BACKGROUND"); n:SetTexture(CS); n:SetAllPoints(b); n:SetTexCoord(unpack(C.ovUp));   b:SetNormalTexture(n)
   local p = b:CreateTexture(nil, "BACKGROUND"); p:SetTexture(CS); p:SetAllPoints(b); p:SetTexCoord(unpack(C.ovDown)); b:SetPushedTexture(p)
   local h = b:CreateTexture(nil, "HIGHLIGHT"); h:SetTexture(CS); h:SetBlendMode("ADD"); h:SetAlpha(0.4); h:SetAllPoints(b); h:SetTexCoord(unpack(C.ovUp)); b:SetHighlightTexture(h)
+  b._xoffset = OVERFLOW_XOFF
   navBar._overflow = b
   b:Hide()
   return b
@@ -165,16 +175,20 @@ local function getClassicCrumb(navBar, i)
   b = CreateFrame("Button", nil, navBar)
   b:SetHeight(NAV_H)
   styleNavButton(b)
+  b._xoffset = 0                               -- plain NavButton: next crumb butts against our right edge
   b.menuArrow = makeMenuArrow(b); b.menuArrow:Hide()
   navBar._crumbs[i] = b
   return b
 end
 
--- Lay out the home + crumb chain LEFT-to-RIGHT with overlapping "tab" anchors. Home and the
--- LAST (current) crumb are always shown; if the natural chain is wider than the bar, the MIDDLE
--- crumbs collapse into the overflow ▾ (it lists them as a jump menu). A descending frame-level
--- run makes each crumb's ">" joiner draw over its right-hand neighbour. Overflow effectively
--- never triggers in practice (≤4 short crumbs on a 500px bar) but is handled for safety.
+-- Lay out the home + crumb chain LEFT-to-RIGHT. Each button is anchored to its predecessor's
+-- RIGHT edge shifted by the predecessor's `_xoffset` (Home -15 / overflow -18 / crumbs 0 — see
+-- HOME_XOFF above; mirrors retail NavBar_CheckLength's `xoffset = navList[i].xoffset or 0`).
+-- Home and the LAST (current) crumb are always shown; if the natural chain is wider than the
+-- bar, the MIDDLE crumbs collapse into the overflow ▾ (it lists them as a jump menu). A
+-- descending frame-level run makes each crumb's ">" joiner draw over its right-hand neighbour.
+-- Overflow effectively never triggers in practice (≤4 short crumbs on a 500px bar) but is
+-- handled for safety.
 local function classicLayout(navBar)
   local list = navBar._navList                 -- { homeBtn, crumb1, crumb2, ... }
   local overflow = navBar._overflow
@@ -198,7 +212,7 @@ local function classicLayout(navBar)
     for i = 2, n - 1 do
       local b = list[i]
       if used + b:GetWidth() <= maxWidth then
-        used = used + b:GetWidth() + OVERLAP
+        used = used + b:GetWidth()             -- retail sums plain widths (xoffsets ignored)
         visible[#visible + 1] = b
       else
         b:Hide()
@@ -227,7 +241,7 @@ local function classicLayout(navBar)
   for i, b in ipairs(visible) do
     b:Show()
     b:ClearAllPoints()
-    if prev then b:SetPoint("LEFT", prev, "RIGHT", OVERLAP, 0)
+    if prev then b:SetPoint("LEFT", prev, "RIGHT", prev._xoffset or 0, 0)
     else         b:SetPoint("LEFT", navBar, "LEFT", 0, 0) end
     b:SetFrameLevel(topLevel - i)
     prev = b
