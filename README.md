@@ -36,7 +36,7 @@ Open the journal with the book button on the micro menu, `/ej`, or the key bindi
 | `/ej help` | list the commands |
 | `/ej scale <0.5-2.0>` | window size |
 | `/ej resetpos` | reset the window position |
-| `/ej skin classic\|dragonflight` | MoP Classic or DragonUI look (reloads the UI) |
+| `/ej skin classic\|dragonflight` | Wotlk or DragonUI look (reloads the UI) |
 | `/ej faction auto\|all` | only your faction's bosses and loot (default), or both |
 
 ## To-do
