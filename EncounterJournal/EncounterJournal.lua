@@ -540,6 +540,13 @@ local function build()
     EJ.ej.SavePosition(self)
   end)
   if EJ.panelmgr then EJ.panelmgr.Register(frame) end   -- retail UIPanel slot (left); see Core/PanelManager
+  -- micro button stays pushed while open, like Blizzard's
+  frame:HookScript("OnShow", function()
+    if EJ.ej._microButton then EJ.ej._microButton:SetButtonState("PUSHED", 1) end
+  end)
+  frame:HookScript("OnHide", function()
+    if EJ.ej._microButton then EJ.ej._microButton:SetButtonState("NORMAL") end
+  end)
   frame:Hide()
 
   buildChrome(frame)

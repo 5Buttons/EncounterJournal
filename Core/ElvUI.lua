@@ -48,7 +48,9 @@ local function relayout(ab)
     if _G[name] then buttons[#buttons + 1] = _G[name] end
   end
 
+  -- slider maxes at 10; treat max as "one row"
   local perRow = db.buttonsPerRow or #buttons
+  if perRow >= 10 then perRow = #buttons end
   local offset = E:Scale(E.PixelMode and 1 or 3)
   local spacing = E:Scale(offset + (db.buttonSpacing or 0))
   local numRows, prev = 1, bar
