@@ -7,6 +7,8 @@
 --     x                  = 7,     -- horizontal offset from scroll.RIGHT (default 7)
 --     strataHigh         = true,  -- raise scrollbar to HIGH strata (default true)
 --     hideIfUnscrollable = false, -- hide bar when content fits viewport (default false)
+--     classic            = nil,   -- keep the native UIPanelScrollBar art (default: the
+--                                 -- active UI skin is "classic", Core/Options.lua)
 --   })
 --
 -- The helper:
@@ -101,6 +103,11 @@ local ARROW_H      = 11    -- retail XML:112
 -- SLIDER_Y_INSET puts the slider's TOP at scroll.TOP - SLIDER_Y_INSET, so
 -- arrow.TOP = slider.TOP + ARROW_GAP + ARROW_H lands at scroll.TOP exactly
 -- when SLIDER_Y_INSET = ARROW_GAP + ARROW_H = 14 + 11 = 25.
+-- Classic-skin metrics: the native 3.3.5 UIPanelScrollBar is 16 wide with 16-tall arrows sitting
+-- outside the slider (UIPanelScrollFrameTemplate's own TOPRIGHT(6,-16)/BOTTOMRIGHT(6,16) anchors).
+local CLASSIC_WIDTH   = 16
+local CLASSIC_Y_INSET = 16
+
 local CAP_H          = 8                       -- minimal-scrollbar-small-thumb-top atlas size
 local VISIBLE_GAP    = 6                       -- visible buffer between thumb cap and arrow
 local ARROW_GAP      = CAP_H + VISIBLE_GAP     -- 14
@@ -254,6 +261,8 @@ function EJ.scrollbar.Reskin(scroll, opts)
   local xOffset            = opts.x                  or 7
   local strataHigh         = opts.strataHigh         ~= false
   local hideIfUnscrollable = opts.hideIfUnscrollable == true
+  local classic            = opts.classic
+  if classic == nil then classic = EJ.skin and EJ.skin.Is and EJ.skin.Is(EJ.skin.CLASSIC) or false end
 
   -- Hide the classic track art baked into the underlying Slider template so it can't
   -- bleed under our modern minimal track. UIPanelStretchableArtScrollBarTemplate
@@ -270,8 +279,8 @@ function EJ.scrollbar.Reskin(scroll, opts)
          and r.Hide then r:Hide() end
     end
   end
-  hideClassicTrack()
-  if not sb._ejTrackHideHooked then
+  if not classic then hideClassicTrack() end
+  if not classic and not sb._ejTrackHideHooked then
     sb._ejTrackHideHooked = true
     sb:HookScript("OnShow", hideClassicTrack)
   end
@@ -287,11 +296,20 @@ function EJ.scrollbar.Reskin(scroll, opts)
   -- Position + size. Visual is retail's 8 wide; hit rect insets give a
   -- 12-wide click target for drag tolerance. SLIDER_Y_INSET leaves room
   -- for arrows OUTSIDE the slider's TOP/BOTTOM (see design note above).
+  -- Classic: the native bar is twice as wide, so shift it left by half the difference to keep it
+  -- centred on the same gutter line the minimal bar uses.
   sb:ClearAllPoints()
-  sb:SetPoint("TOPLEFT",    scroll, "TOPRIGHT",    xOffset, -SLIDER_Y_INSET)
-  sb:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", xOffset,  SLIDER_Y_INSET)
-  sb:SetWidth(SLIDER_WIDTH)
-  sb:SetHitRectInsets(-2, -2, 0, 0)  -- 2 px beyond each side for usability
+  if classic then
+    local cx = xOffset - (CLASSIC_WIDTH - SLIDER_WIDTH) / 2
+    sb:SetPoint("TOPLEFT",    scroll, "TOPRIGHT",    cx, -CLASSIC_Y_INSET)
+    sb:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", cx,  CLASSIC_Y_INSET)
+    sb:SetWidth(CLASSIC_WIDTH)
+  else
+    sb:SetPoint("TOPLEFT",    scroll, "TOPRIGHT",    xOffset, -SLIDER_Y_INSET)
+    sb:SetPoint("BOTTOMLEFT", scroll, "BOTTOMRIGHT", xOffset,  SLIDER_Y_INSET)
+    sb:SetWidth(SLIDER_WIDTH)
+    sb:SetHitRectInsets(-2, -2, 0, 0)  -- 2 px beyond each side for usability
+  end
 
   -- Strata promotion. The scrollbar otherwise gets intercepted by layered
   -- frames below (Era's parent ReputationFrame etc. with enableMouse=true).
@@ -302,40 +320,45 @@ function EJ.scrollbar.Reskin(scroll, opts)
   end
   sb:EnableMouse(true)
 
-  -- Arrows: anchored OUTSIDE slider TOP/BOTTOM with an 8 px gap so the
-  -- thumb's drag range stops visually short of the arrows.
-  reskinArrowButton(sb.ScrollUpButton,
-    "minimal-scrollbar-arrow-top",
-    "minimal-scrollbar-arrow-top-over",
-    "minimal-scrollbar-arrow-top-down",
-    "TOP")
-  reskinArrowButton(sb.ScrollDownButton,
-    "minimal-scrollbar-arrow-bottom",
-    "minimal-scrollbar-arrow-bottom-over",
-    "minimal-scrollbar-arrow-bottom-down",
-    "BOTTOM")
   if sb.ScrollUpButton   then sb.ScrollUpButton:EnableMouse(true)   end
   if sb.ScrollDownButton then sb.ScrollDownButton:EnableMouse(true) end
 
-  -- Track + thumb.
-  buildTrack(sb)
-  buildThumb(sb)
+  -- Classic skin: the template's own arrows/knob are the look — skip the minimal art (and its
+  -- thumb hide, which only exists to avoid a caps-only minimal thumb).
+  if not classic then
+    -- Arrows: anchored OUTSIDE slider TOP/BOTTOM with an 8 px gap so the
+    -- thumb's drag range stops visually short of the arrows.
+    reskinArrowButton(sb.ScrollUpButton,
+      "minimal-scrollbar-arrow-top",
+      "minimal-scrollbar-arrow-top-over",
+      "minimal-scrollbar-arrow-top-down",
+      "TOP")
+    reskinArrowButton(sb.ScrollDownButton,
+      "minimal-scrollbar-arrow-bottom",
+      "minimal-scrollbar-arrow-bottom-over",
+      "minimal-scrollbar-arrow-bottom-down",
+      "BOTTOM")
 
-  -- Thumb hides when content fits the viewport (retail ScrollBarMixin:Update,
-  -- ScrollBar.lua:236-239 — showThumb = hasScrollableExtent). The arrows and
-  -- track stay (retail keeps the steppers visible, just disabled at the ends).
-  -- Without this an unscrollable list shows a degenerate caps-only thumb with no
-  -- middle ("handlebar middle isn't rendering"). Independent of the
-  -- hideIfUnscrollable (whole-bar) behavior below.
-  local function refreshThumb()
-    local yr = (scroll.GetVerticalScrollRange and scroll:GetVerticalScrollRange()) or 0
-    local show = yr and yr > 1
-    local thumb = sb.GetThumbTexture and sb:GetThumbTexture()
-    if thumb then thumb:SetShown(show) end
-    if sb._ejThumbCapHost then sb._ejThumbCapHost:SetShown(show) end
+    -- Track + thumb.
+    buildTrack(sb)
+    buildThumb(sb)
+
+    -- Thumb hides when content fits the viewport (retail ScrollBarMixin:Update,
+    -- ScrollBar.lua:236-239 — showThumb = hasScrollableExtent). The arrows and
+    -- track stay (retail keeps the steppers visible, just disabled at the ends).
+    -- Without this an unscrollable list shows a degenerate caps-only thumb with no
+    -- middle ("handlebar middle isn't rendering"). Independent of the
+    -- hideIfUnscrollable (whole-bar) behavior below.
+    local function refreshThumb()
+      local yr = (scroll.GetVerticalScrollRange and scroll:GetVerticalScrollRange()) or 0
+      local show = yr and yr > 1
+      local thumb = sb.GetThumbTexture and sb:GetThumbTexture()
+      if thumb then EJ.SetShown(thumb, show) end
+      if sb._ejThumbCapHost then EJ.SetShown(sb._ejThumbCapHost, show) end
+    end
+    scroll:HookScript("OnScrollRangeChanged", refreshThumb)
+    if EJ.After then EJ.After(0, refreshThumb) end
   end
-  scroll:HookScript("OnScrollRangeChanged", refreshThumb)
-  if C_Timer and C_Timer.After then C_Timer.After(0, refreshThumb) end
 
   -- Visibility behavior.
   if hideIfUnscrollable then
@@ -347,14 +370,14 @@ function EJ.scrollbar.Reskin(scroll, opts)
     local function applyVisibility()
       local yrange = scroll.GetVerticalScrollRange and scroll:GetVerticalScrollRange() or 0
       local visible = yrange > 0
-      if sb.ScrollUpButton   then sb.ScrollUpButton:SetShown(visible)   end
-      if sb.ScrollDownButton then sb.ScrollDownButton:SetShown(visible) end
-      sb:SetShown(visible)
+      if sb.ScrollUpButton   then EJ.SetShown(sb.ScrollUpButton, visible)   end
+      if sb.ScrollDownButton then EJ.SetShown(sb.ScrollDownButton, visible) end
+      EJ.SetShown(sb, visible)
     end
     scroll:HookScript("OnScrollRangeChanged", applyVisibility)
     -- Apply initial state after a tick (yrange isn't computed until after
     -- the next frame's layout pass).
-    if C_Timer and C_Timer.After then C_Timer.After(0, applyVisibility) end
+    if EJ.After then EJ.After(0, applyVisibility) end
   else
     -- Force arrows + bar always visible. Era's ScrollFrame_OnScrollRange
     -- Changed (era SecureScrollTemplates.lua:82-87) hides everything when
@@ -405,7 +428,7 @@ function EJ.scrollbar.AttachBottomShadow(scrollBox, host, opts)
     scrollBox:RegisterCallback(BaseScrollBoxEvents.OnScroll, update, holder)
     scrollBox:RegisterCallback(BaseScrollBoxEvents.OnLayout, update, holder)
   end
-  if C_Timer and C_Timer.After then C_Timer.After(0, update) end
+  if EJ.After then EJ.After(0, update) end
   holder.Update = update
   return holder
 end

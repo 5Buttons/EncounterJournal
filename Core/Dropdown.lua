@@ -24,8 +24,8 @@ EJ.dropdown = EJ.dropdown or {}
 
 -- Pick ONE family and stay consistent — a C_-template frame driven by native Initialize (or
 -- vice-versa) mismatches, since each Initialize sets attributes its own template's scripts
--- read. !!!ClassicAPI (a hard dependency) ships the C_ family; native is the fallback if it's
--- somehow absent (the addon wouldn't load without ClassicAPI anyway).
+-- read. !!!ClassicAPI (optional) ships the C_ family and is used when loaded; otherwise the
+-- native 3.3.5a UIDropDownMenu family.
 local hasC       = C_UIDropDownMenu_Initialize ~= nil
 local TEMPLATE   = hasC and "C_UIDropDownMenuTemplate" or "UIDropDownMenuTemplate"
 local Init       = hasC and C_UIDropDownMenu_Initialize or UIDropDownMenu_Initialize

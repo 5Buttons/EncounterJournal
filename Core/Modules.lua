@@ -104,9 +104,9 @@ function Mods.ConflictedBy(name)
   local opts = Mods.registry[name]
   local rivals = opts and opts.conflictsWith
   local found = false
-  if rivals and C_AddOns and C_AddOns.IsAddOnLoaded then
+  if rivals then
     for _, addon in ipairs(rivals) do
-      if C_AddOns.IsAddOnLoaded(addon) then found = addon; break end
+      if EJ.IsAddOnLoaded(addon) then found = addon; break end
     end
   end
   Mods.conflictCache[name] = found

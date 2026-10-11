@@ -1,83 +1,122 @@
--- Core/Compat.lua — gap-filler shims on top of !!!ClassicAPI (a HARD dependency).
+-- Core/Compat.lua — the journal's own shims for the handful of post-3.3.5a APIs it uses.
 --
--- The heavy lifting of emulating the modern/Era API on 3.3.5a is done by Tsoukie's
--- !!!ClassicAPI library, which EncounterJournal depends on (see the TOC). ClassicAPI already
--- provides: C_Timer (After/NewTimer/NewTicker), GetPhysicalScreenSize, working
--- texture:SetAtlas + C_Texture atlas data, NineSlice, SearchBoxTemplate, C_Item
--- (RequestLoadItemDataByID), C_Map.GetPlayerMapPosition, C_AddOns, and a base SOUNDKIT table.
+-- The addon runs on a stock 3.3.5a client. !!!ClassicAPI is an OPTIONAL dependency: when it is
+-- loaded, a shim hands off to its implementation (C_Timer, C_Item, C_AddOns, GetPhysicalScreenSize,
+-- SearchBoxTemplate); when it is absent, the fallback here does the job with native 3.3.5a calls.
+-- Nothing in this file creates or modifies a global the client or another addon could see —
+-- everything lives on the EJ table — so it can't clash with ClassicAPI or other addons.
 --
--- This file only patches the handful of things the ported journal references that ClassicAPI
--- does NOT cover. Loaded first in our TOC, after ClassicAPI has fully loaded (dependency order),
--- so we ADD to its tables rather than create them. Every shim is define-if-absent.
+-- Loaded FIRST in the TOC (before Core.lua), so it creates the EJ table.
 
--- ---------------------------------------------------------------------------------------
--- SOUNDKIT — ClassicAPI seeds a base table but omits the character-panel OPEN/CLOSE kits the
--- journal's WirePanelSounds uses (it has only IG_CHARACTER_INFO_TAB). Add them without
--- clobbering ClassicAPI's entries. 3.3.5 PlaySound takes these string names directly.
--- ---------------------------------------------------------------------------------------
-SOUNDKIT = SOUNDKIT or {}
-SOUNDKIT.IG_CHARACTER_INFO_OPEN  = SOUNDKIT.IG_CHARACTER_INFO_OPEN  or "igCharacterInfoOpen"
-SOUNDKIT.IG_CHARACTER_INFO_CLOSE = SOUNDKIT.IG_CHARACTER_INFO_CLOSE or "igCharacterInfoClose"
+EJ = EJ or {}
 
--- ---------------------------------------------------------------------------------------
--- PortraitFrameTemplate metal chrome — the REAL retail art. (Was Core/Atlas335.lua, which
--- aliased the UI-Frame-Metal-* names onto ClassicAPI's DiamondMetal look-alike; we now ship the
--- actual retail pieces and register them against the real texcoords.)
---
--- ClassicAPI's NineSlice "PortraitFrameTemplate" layout (Util/NineSlice.lua:38-47) references the
--- UI-Frame-Metal-* atlas family but its AtlasInfo only registers UI-Frame-DiamondMetal-* (a
--- diamond-studded 32px look-alike) — so without help the metal layout draws nothing, and the
--- PortraitMetal-CornerTopLeft (the round portrait ring) was never registered at all (→ the
--- portrait showed as a bare square). We register every piece from the shipped retail sheets in
--- Art/Frame/ with texcoords transcribed from UiTextureAtlasMember.12.1.0.68301.csv (kept under
--- References/ — dev-only, not part of the shipped addon). ClassicAPI's nineslice then draws the
--- genuine retail metal frame.
---
--- SHEETS (retail UiTextureAtlasID → file, all under Art/Frame/):
---   1390 corners  → uiframemetal2x.blp            512×512 BGRA
---   1395 top/bot  → uiframemetalhorizontal2x.blp   64×256 BGRA   (_ = horiz-tile)
---   1394 sides    → uiframemetalvertical2x.blp     512×32 BGRA   (! = vert-tile, art is UPRIGHT)
---   950  streaks  → uiframehorizontal.blp          256×128 DXT
--- Runs at load, after ClassicAPI populated AtlasData.
--- ---------------------------------------------------------------------------------------
-local AtlasData = C_Texture and C_Texture.AtlasData
+-- True when Tsoukie's !!!ClassicAPI is loaded (it sorts first and is an OptionalDep, so by the
+-- time this file runs it has fully loaded if it is installed and enabled).
+EJ.HasClassicAPI = (IsAddOnLoaded and IsAddOnLoaded("!!!ClassicAPI")) and true or false
 
--- PortraitFrameTemplate metal nineslice (ClassicAPI Util/NineSlice.lua:38-47).
--- CORNERS: real retail art shipped as Art/Frame/uiframemetal2x.blp (512×512, retail atlas 1390).
--- Texcoords from UiTextureAtlasMember.12.1.0.68301.csv (pixel coords ÷512); render W/H = the 1x
--- size (150px source → 75, 64px source → 32). This gives the smooth metal corners AND the round
--- PortraitMetal-CornerTopLeft ring around the portrait (which ClassicAPI never registered → the
--- top-left was bare before). EDGES + TopTileStreaks live on SEPARATE retail sheets (atlas 1394 /
--- 1395 / 950) not yet shipped, so they stay aliased to DiamondMetal for now.
-local FRAME = "Interface\\AddOns\\EncounterJournal\\Art\\Frame\\"
--- Register a real-art atlas slice. (w,h)=1x render size; (L,R,T,B)=pixel coords on the sheet of
--- (sw,sh); tileH/tileV per the _/! prefix. ClassicAPI's nineslice SetAtlas(name,true) sizes the
--- piece to (w,h) and reads these tile flags (Util/NineSlice.lua:254-258).
-local function regAt(name, sheet, w, h, L, R, T, B, sw, sh, tileH, tileV)
-  if AtlasData and C_Texture.RegisterAtlas and not AtlasData[name] then
-    C_Texture.RegisterAtlas(name, { w, h, L/sw, R/sw, T/sh, B/sh, tileH or false, tileV or false }, FRAME .. sheet, true)
+-- ---------------------------------------------------------------------------------------------
+-- Timers — EJ.After(delay, fn) ≈ C_Timer.After. Fallback: one hidden OnUpdate frame that runs
+-- due callbacks; idle (no OnUpdate) while nothing is queued.
+-- ---------------------------------------------------------------------------------------------
+if C_Timer and C_Timer.After then
+  EJ.After = C_Timer.After
+else
+  local queue, driver = {}, nil
+  local function onUpdate(self)
+    local now, i = GetTime(), 1
+    while i <= #queue do
+      local t = queue[i]
+      if t.at <= now then
+        table.remove(queue, i)
+        local ok, err = pcall(t.fn)
+        if not ok and geterrorhandler then geterrorhandler()(err) end
+      else
+        i = i + 1
+      end
+    end
+    if #queue == 0 then self:SetScript("OnUpdate", nil) end
+  end
+  function EJ.After(delay, fn)
+    if type(fn) ~= "function" then return end
+    driver = driver or CreateFrame("Frame")
+    queue[#queue + 1] = { at = GetTime() + math.max(0, tonumber(delay) or 0), fn = fn }
+    driver:SetScript("OnUpdate", onUpdate)
   end
 end
 
--- CORNERS — retail atlas 1390 sheet (uiframemetal2x.blp, 512×512). 150px source → 75 render,
--- 64px → 32. The PortraitMetal-CornerTopLeft is the round portrait ring ClassicAPI never had.
-regAt("UI-Frame-PortraitMetal-CornerTopLeft", "uiframemetal2x.blp", 75, 75,   1, 151, 153, 303, 512, 512)
-regAt("UI-Frame-Metal-CornerTopLeft",         "uiframemetal2x.blp", 75, 75,   1, 151,   1, 151, 512, 512)
-regAt("UI-Frame-Metal-CornerTopRight",        "uiframemetal2x.blp", 75, 75, 153, 303,   1, 151, 512, 512)
-regAt("UI-Frame-Metal-CornerBottomLeft",      "uiframemetal2x.blp", 32, 32, 153, 217, 153, 217, 512, 512)
-regAt("UI-Frame-Metal-CornerBottomRight",     "uiframemetal2x.blp", 32, 32, 219, 283, 153, 217, 512, 512)
+-- ---------------------------------------------------------------------------------------------
+-- Widget helpers for methods 3.3.5a lacks (Region:SetShown, Button:SetEnabled arrived in 4.x+).
+-- Plain functions instead of metatable patches, so no other addon's widgets are touched.
+-- ---------------------------------------------------------------------------------------------
+function EJ.SetShown(obj, shown)
+  if not obj then return end
+  if shown then obj:Show() else obj:Hide() end
+end
 
--- TOP/BOTTOM edges — retail atlas 1395 (uiframemetalhorizontal2x.blp, 64×256), `_` = horiz-tile.
--- H = band thickness (75 top to match the corners, 32 bottom); stretched between corners, tiled.
-regAt("_UI-Frame-Metal-EdgeTop",    "uiframemetalhorizontal2x.blp", 32, 75, 0, 64,   1, 151, 64, 256, true, false)
-regAt("_UI-Frame-Metal-EdgeBottom", "uiframemetalhorizontal2x.blp", 16, 32, 0, 32, 153, 217, 64, 256, true, false)
+function EJ.SetEnabled(btn, enabled)
+  if not btn then return end
+  if enabled then btn:Enable() else btn:Disable() end
+end
 
--- SIDE edges — retail atlas 1394 (uiframemetalvertical2x.blp, 512×32), `!` = vert-tile. The art
--- is stored UPRIGHT (thin vertical metal strips that tile down the side, NOT rotated — confirmed
--- by converting the sheet to PNG). W = band width (75, matching the corners), H = tile unit (16).
-regAt("!UI-Frame-Metal-EdgeLeft",  "uiframemetalvertical2x.blp", 75, 16,   1, 151, 0, 32, 512, 32, false, true)
-regAt("!UI-Frame-Metal-EdgeRight", "uiframemetalvertical2x.blp", 75, 16, 153, 303, 0, 32, 512, 32, false, true)
+-- ---------------------------------------------------------------------------------------------
+-- Physical screen size. 3.3.5a has no GetPhysicalScreenSize; the "gxResolution" CVar holds the
+-- active mode as "1920x1080". Returns width, height (0, 0 if unknown).
+-- ---------------------------------------------------------------------------------------------
+function EJ.PhysicalScreenSize()
+  if GetPhysicalScreenSize then
+    local w, h = GetPhysicalScreenSize()
+    if h and h > 0 then return w, h end
+  end
+  local res = GetCVar and GetCVar("gxResolution")
+  local w, h = res and res:match("^(%d+)x(%d+)")
+  if not w then
+    -- GetScreenResolutions()[GetCurrentResolution()] is the same string on 3.3.5a
+    local idx = GetCurrentResolution and GetCurrentResolution()
+    local list = idx and GetScreenResolutions and { GetScreenResolutions() }
+    res = list and list[idx]
+    w, h = res and res:match("^(%d+)x(%d+)")
+  end
+  return tonumber(w) or 0, tonumber(h) or 0
+end
 
--- TopTileStreaks decorative band under the title (atlas 950, uiframehorizontal.blp 256×128, 1x).
--- Not a nineslice piece — the window's buildChrome SetAtlas("_UI-Frame-TopTileStreaks") finds it.
-regAt("_UI-Frame-TopTileStreaks", "uiframehorizontal.blp", 256, 43, 0, 256, 1, 44, 256, 128, true, false)
+-- ---------------------------------------------------------------------------------------------
+-- Add-on queries (C_AddOns on newer clients / ClassicAPI, the plain globals on 3.3.5a).
+-- ---------------------------------------------------------------------------------------------
+function EJ.IsAddOnLoaded(name)
+  local fn = (C_AddOns and C_AddOns.IsAddOnLoaded) or _G.IsAddOnLoaded
+  if not fn then return false end
+  local ok, loaded = pcall(fn, name)
+  return (ok and loaded) and true or false
+end
+
+-- True if the addon is INSTALLED (present + enabled), loaded or not. IsAddOnLoaded is wrong for
+-- LoadOnDemand addons, which aren't loaded at PLAYER_LOGIN. GetAddOnInfo's 6th return ("reason")
+-- is "MISSING" only when the addon isn't there at all.
+function EJ.IsAddOnInstalled(name)
+  local fn = (C_AddOns and C_AddOns.GetAddOnInfo) or _G.GetAddOnInfo
+  if not fn then return EJ.IsAddOnLoaded(name) end
+  local ok, _, _, _, _, reason = pcall(fn, name)
+  return ok and reason ~= "MISSING"
+end
+
+-- ---------------------------------------------------------------------------------------------
+-- Items. EJ.RequestItem asks the server for an item the client hasn't cached: ClassicAPI's
+-- C_Item.RequestLoadItemDataByID when present (pcall: it throws on ids this server doesn't know),
+-- plus the native 3.3.5a way — a hidden tooltip SetHyperlink, which is what AtlasLoot does.
+-- EJ.SetTooltipItem fills a tooltip for a CACHED item (SetItemByID is 4.x+; SetHyperlink with a
+-- cached item sends nothing to the server).
+-- ---------------------------------------------------------------------------------------------
+local scanTip
+function EJ.RequestItem(itemID)
+  if not itemID then return end
+  if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, itemID) end
+  scanTip = scanTip or CreateFrame("GameTooltip", "EJ_ItemScanTip", nil, "GameTooltipTemplate")
+  scanTip:SetOwner(UIParent, "ANCHOR_NONE")
+  pcall(scanTip.SetHyperlink, scanTip, "item:" .. itemID .. ":0:0:0:0:0:0:0")
+end
+
+function EJ.SetTooltipItem(tooltip, itemID)
+  local _, link = GetItemInfo(itemID)
+  if not link then return false end
+  return pcall(tooltip.SetHyperlink, tooltip, link) and true or false
+end

@@ -62,7 +62,7 @@ end
 -- the 4K multiplier + the opt-out apply addon-wide from one seam.
 function EJ.FrameUtil.PixelBaseScale()
   if GetCVarBool and GetCVarBool("useUiScale") then return nil end
-  local _, ph = GetPhysicalScreenSize()
+  local _, ph = EJ.PhysicalScreenSize()
   if not ph or ph <= 0 then return nil end
   return (768 / ph) * math.max(1, math.floor(ph / 1080 + 0.5))
 end
@@ -97,7 +97,7 @@ function EJ.FrameUtil.PinPixelPerfect(frame, userScale)
     frame:SetScale(userScale or 1.0)
     return
   end
-  local _, ph = GetPhysicalScreenSize()
+  local _, ph = EJ.PhysicalScreenSize()
   if not ph or ph <= 0 then return end
   -- Automatic INTEGER pixel multiplier (owner 2026-06-12): crispness needs each art
   -- pixel to map to a WHOLE number of screen pixels, not 1:1 specifically. m=1 at
@@ -130,7 +130,7 @@ local function scheduleRepin()
   if repinPending then return end
   repinPending = true
   local function run() repinPending = nil; repinAllFrames() end
-  if C_Timer and C_Timer.After then C_Timer.After(0, run) else run() end
+  if EJ.After then EJ.After(0, run) else run() end
 end
 
 -- WHY a second seam beyond the scale events (probe-confirmed 2026-06-13): UI_SCALE_CHANGED /
@@ -160,7 +160,7 @@ pinScaleWatcher:SetScript("OnEvent", function(_, event)
         repinAllFrames()
       end
     end
-    if C_Timer and C_Timer.After then C_Timer.After(0, check) else check() end
+    if EJ.After then EJ.After(0, check) else check() end
     return
   end
   -- UI_SCALE_CHANGED / DISPLAY_SIZE_CHANGED: keep the cache fresh and re-pin (deferred).
@@ -392,14 +392,14 @@ end
 -- Copyable dump dialog — a movable DIALOG-strata frame holding a selectable multiline
 -- EditBox (Ctrl+A / Ctrl+C), generalizing the Debug log window and the per-module dump
 -- boxes reinvented across ~6 modules. Era-verified backdrop path (CreateFrame +
--- BackdropTemplate + SetBackdrop, as Debug.lua uses). Returns the frame; drive it with
+-- native SetBackdrop, as Debug.lua uses). Returns the frame; drive it with
 -- :ShowText(text) (sets text, shows, selects all) or :SetText(text).
 -- STAGED (REFACTOR-PLAN.md Phase 2): not yet adopted; smoke-test before routing the
 -- existing copy boxes through it.
 function EJ.FrameUtil.CopyBox(opts)
   opts = opts or {}
   local w, h = opts.w or 760, opts.h or 500
-  local f = CreateFrame("Frame", opts.name, UIParent, "BackdropTemplate")
+  local f = CreateFrame("Frame", opts.name, UIParent)   -- 3.3.5a frames have SetBackdrop natively
   f:SetSize(w, h)
   f:SetPoint("CENTER")
   f:SetFrameStrata("DIALOG")
@@ -446,24 +446,4 @@ function EJ.FrameUtil.CopyBox(opts)
   return f
 end
 
--- Era moved IsAddOnLoaded under C_AddOns; the `(C_AddOns and C_AddOns.IsAddOnLoaded) or
--- IsAddOnLoaded` shim (pcall-wrapped) is copied across several modules. One accessor.
--- Returns a plain bool.
-function EJ.IsAddOnLoaded(name)
-  local fn = (C_AddOns and C_AddOns.IsAddOnLoaded) or _G.IsAddOnLoaded
-  if not fn then return false end
-  local ok, loaded = pcall(fn, name)
-  return (ok and loaded) and true or false
-end
-
--- True if the addon is INSTALLED (present in the AddOns folder + enabled), whether or not it has
--- actually loaded yet. IsAddOnLoaded is wrong for LoadOnDemand addons (e.g. LittleWigs): they are
--- not loaded at PLAYER_LOGIN and only zone-load on demand, so IsAddOnLoaded returns false at login
--- even when installed. GetAddOnInfo's `reason` is "MISSING" only when the addon isn't installed at
--- all (era Blizzard_AddOnList/Classic/AddonList.lua:156 reads select(5,...) the same way).
-function EJ.IsAddOnInstalled(name)
-  local fn = C_AddOns and C_AddOns.GetAddOnInfo
-  if not fn then return EJ.IsAddOnLoaded(name) end
-  local ok, _, _, _, _, reason = pcall(fn, name)
-  return ok and reason ~= "MISSING"
-end
+-- EJ.IsAddOnLoaded / EJ.IsAddOnInstalled live in Core/Compat.lua.

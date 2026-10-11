@@ -31,7 +31,7 @@ end
 -- SavedVariables schema + migration framework (Hard Rule #7).
 -- Bump CURRENT_SCHEMA and add EJ.migrations[N] = function(db) ... end when the saved
 -- layout changes. Edit Mode layouts are the crown jewels — never wipe.
-local CURRENT_SCHEMA = 15
+local CURRENT_SCHEMA = 16
 EJ.migrations = EJ.migrations or {}
 
 EJ.migrations[1] = function(db)
@@ -174,11 +174,15 @@ EJ.migrations[14] = function(db)
 end
 
 EJ.migrations[15] = function(db)
-  -- UI skin selection (Core/Skin.lua). The journal's chrome is rendered in the "classic"
+  -- UI skin selection (Core/Options.lua). The journal's chrome is rendered in the "classic"
   -- (original Encounter Journal) look by default; "dragonflight" is a differentiated variant
   -- (currently the plain breadcrumb navbar, art filled in later). Stored as a string so the
   -- skin module can read EJ.db.skin at build time. Default classic = retail-EJ-faithful look.
   db.skin = db.skin or "classic"
+end
+
+EJ.migrations[16] = function(db)
+  db.skin = "dragonflight"
 end
 
 local function applyMigrations(db)
@@ -292,8 +296,8 @@ boot:SetScript("OnEvent", function(_, event, name)
   elseif event == "PLAYER_LOGIN" then
     probeCapabilities()
     -- Delay past the login flurry so the notice isn't lost under the loading screen.
-    if C_Timer and C_Timer.After then
-      C_Timer.After(3, showStartupNotice)
+    if EJ.After then
+      EJ.After(3, showStartupNotice)
     else
       showStartupNotice()
     end

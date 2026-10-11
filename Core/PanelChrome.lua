@@ -200,7 +200,7 @@ function PC.ModernizeCloseButton(target, opts)
   -- shipped the button simply keeps the native 3.3.5 X (never blank).
   local function applyState(setter, getter, atlas, blend)
     local entry = EJ.tex.AtlasEntry and EJ.tex.AtlasEntry(atlas)
-    local path  = entry and EJ.tex.localFiles and EJ.tex.localFiles[entry.file]
+    local path  = entry and EJ.tex.localFiles and (entry.path or EJ.tex.localFiles[entry.file])
     if not (entry and type(path) == "string") then return false end
     cb[setter](cb, path)
     local t = cb[getter] and cb[getter](cb)

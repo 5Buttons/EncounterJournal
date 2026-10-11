@@ -54,6 +54,7 @@ local function buildIndex()
     end
   end
 end
+EJ.ej.ResetSearchIndex = function() index = nil end   -- after Faction.lua re-filters the data
 
 local function search(needle)
   if not index then buildIndex() end
@@ -141,8 +142,8 @@ end
 -- steals focus on mouse-down, before its OnClick fires on mouse-up) still lands.
 function EJ.ej.SearchHide(delayed)
   if not results then return end
-  if delayed and C_Timer and C_Timer.After then
-    C_Timer.After(0.2, function()
+  if delayed and EJ.After then
+    EJ.After(0.2, function()
       if results and not results:IsMouseOver() then results:Hide() end
     end)
   else
@@ -250,7 +251,30 @@ function EJ.ej.BuildNavBar(f)
   -- without search. Deep search lives above in this file (EJ.ej.SearchUpdate:
   -- instances/bosses/abilities/loot with a results dropdown); plain grid filtering is the
   -- fallback if that file is absent.
-  local ok, sb = pcall(CreateFrame, "EditBox", "EJ_EncounterJournalSearchBox", f, "SearchBoxTemplate")
+  -- ClassicAPI's SearchBoxTemplate when it is loaded; otherwise the native InputBoxTemplate with a
+  -- grey SEARCH placeholder (ReadSearchText treats the placeholder as empty either way).
+  local ok, sb
+  if EJ.HasClassicAPI then
+    ok, sb = pcall(CreateFrame, "EditBox", "EJ_EncounterJournalSearchBox", f, "SearchBoxTemplate")
+  end
+  if not (ok and sb) then
+    ok, sb = pcall(CreateFrame, "EditBox", "EJ_EncounterJournalSearchBox", f, "InputBoxTemplate")
+    if ok and sb then
+      local placeholder = SEARCH or "Search"
+      sb:SetAutoFocus(false)
+      sb:SetTextInsets(2, 2, 0, 0)
+      local function showPlaceholder(self)
+        if self:GetText() == "" then self:SetText(placeholder); self:SetTextColor(0.5, 0.5, 0.5) end
+      end
+      sb:SetScript("OnEditFocusGained", function(self)
+        if self:GetText() == placeholder then self:SetText("") end
+        self:SetTextColor(1, 1, 1)
+      end)
+      sb:SetScript("OnEditFocusLost", showPlaceholder)
+      sb:SetScript("OnEscapePressed", function(self) self:SetText(""); self:ClearFocus() end)
+      showPlaceholder(sb)
+    end
+  end
   if ok and sb then
     sb:SetSize(210, 20)
     sb:SetPoint("TOPRIGHT", f, "TOPRIGHT", -10, -32)

@@ -14,7 +14,7 @@
 --     same numbers the loot `diff` bitmask bits use, so EJ_SetDifficulty filters loot like the window.
 --   * EJ_GetInstanceForMap takes what GetCurrentMapAreaID() returns — on 3.3.5 that is the
 --     WorldMapArea.dbc id + 1 (Blizzard's own 3.3.5 WorldMapFrame.lua calls
---     SetMapByID(GetCurrentMapAreaID() - 1)) — and falls back to a Map.dbc id; worldmap_ids.lua holds
+--     SetMapByID(GetCurrentMapAreaID() - 1)) — and falls back to a Map.dbc id; Core/WorldMap.lua holds
 --     the dbc ids. dungeonAreaMapID returns the raw WorldMapArea.dbc id, which is what SetMapByID
 --     takes here (the 3.3.5 analogue of retail's uiMapID) — so it is GetCurrentMapAreaID() - 1, not
 --     equal to it.
@@ -32,7 +32,7 @@ local S = { tier = nil, instance = nil, encounter = nil, difficulty = nil,
 local MAP_FIX = { [1004] = 189, [1007] = 289, [859] = 309 }   -- Scarlet Monastery, Scholomance, Zul'Gurub
 
 -- 3.3.5's GetCurrentMapAreaID() returns WorldMapArea.dbc id + 1, while SetMapByID() takes the dbc id
--- (see worldmap_ids.lua). Subtracted from the id retail-style callers hand EJ_GetInstanceForMap.
+-- (see Core/WorldMap.lua). Subtracted from the id retail-style callers hand EJ_GetInstanceForMap.
 local WORLDMAP_GET_OFFSET = 1
 
 local TIER = {

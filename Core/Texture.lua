@@ -80,11 +80,10 @@ function EJ.tex.SetAtlas(tex, name, useAtlasSize, filterMode)
   local key = name:lower()
   local entry = EJ_ATLAS and EJ_ATLAS[key]
   if not entry then
-    -- 3.3.5 bridge: the standalone port doesn't ship New Era's generated EJ_ATLAS table, but
-    -- our hard dependency !!!ClassicAPI adds a native texture:SetAtlas backed by C_Texture.AtlasData.
-    -- Use it when the atlas is registered there (we register our chrome atlases via
-    -- C_Texture.RegisterAtlas — see Core/Atlas335.lua). Uses the original-case name: ClassicAPI's
-    -- AtlasData is case-sensitive (e.g. "UI-EJ-Classic"), unlike EJ_ATLAS's lowercased keys.
+    -- Optional fallback: when !!!ClassicAPI is loaded it adds texture:SetAtlas backed by its
+    -- C_Texture.AtlasData — use an atlas registered there that EJ_ATLAS doesn't have. Every atlas
+    -- the journal needs is in EJ_ATLAS (Core/AtlasData.lua), so without ClassicAPI this is a miss.
+    -- Original-case name: ClassicAPI's AtlasData is case-sensitive, unlike EJ_ATLAS's keys.
     if tex.SetAtlas and C_Texture and C_Texture.GetAtlasExists and C_Texture.GetAtlasExists(name) then
       tex:SetAtlas(name, useAtlasSize)
       return true
@@ -92,7 +91,7 @@ function EJ.tex.SetAtlas(tex, name, useAtlasSize, filterMode)
     if EJ.Log then EJ.Log("ATLAS", "MISS atlas " .. tostring(name)) end
     return false
   end
-  local source = EJ.tex.localFiles[entry.file]
+  local source = (entry.path or EJ.tex.localFiles[entry.file])
   -- 3.3.5a: Texture:SetTexture cannot read a raw FileDataID (it renders the red "missing"
   -- square while reporting success), so an EJ_ATLAS entry whose sheet isn't shipped locally is a
   -- MISS — callers then keep their native art instead of a red block. Likewise the 4th filterMode
@@ -157,7 +156,7 @@ function EJ.tex.AtlasMarkup(name, width, height)
   if not name then return nil end
   local entry = EJ_ATLAS and EJ_ATLAS[name:lower()]
   if not entry then return nil end
-  local path = EJ.tex.localFiles[entry.file]
+  local path = (entry.path or EJ.tex.localFiles[entry.file])
   if not path then return nil end                 -- markup can't express a bare FDID reliably
   local B = 1024
   return ("|T%s:%d:%d:0:0:%d:%d:%d:%d:%d:%d|t"):format(
@@ -181,7 +180,7 @@ function EJ.tex.SetAtlasMask(maskTex, name)
     if EJ.Log then EJ.Log("ATLAS", "MISS mask atlas " .. tostring(name)) end
     return false
   end
-  local source = EJ.tex.localFiles[entry.file] or entry.file
+  local source = (entry.path or EJ.tex.localFiles[entry.file]) or entry.file
   maskTex:SetTexture(source, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE", "LINEAR")
   maskTex:SetTexCoord(entry.left, entry.right, entry.top, entry.bottom)
   return true
@@ -264,7 +263,7 @@ function EJ.tex.SetAtlasOnStatusBar(bar, name, filterMode)
     if EJ.Log then EJ.Log("ATLAS", "MISS atlas " .. tostring(name)) end
     return false
   end
-  local source = EJ.tex.localFiles[entry.file] or entry.file
+  local source = (entry.path or EJ.tex.localFiles[entry.file]) or entry.file
 
   -- Engine bar texture: still set so SetValue/min-max math works and child segments
   -- (heal prediction etc.) can anchor to GetStatusBarTexture's right edge. We don't

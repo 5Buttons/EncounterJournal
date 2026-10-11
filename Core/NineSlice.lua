@@ -117,16 +117,6 @@ local nineSliceSetup = {
 }
 
 function EJ.nineslice.ApplyLayout(container, layoutName)
-  -- 3.3.5 bridge: prefer !!!ClassicAPI's NineSliceUtil. It ships correct, MIRROR-based metal-frame
-  -- layouts (PortraitFrameTemplate, …), registers the UI-Frame-Metal-* atlas family, and bundles
-  -- the frame art. New Era's own walker below relies on EJ_ATLAS + SetTextureSliceMargins, neither
-  -- of which exists on 3.3.5 — so when ClassicAPI knows this layout, hand off to it. We only fall
-  -- through to the EJ walker for EJ-only layouts ClassicAPI doesn't define.
-  if NineSliceUtil and NineSliceUtil.GetLayout and NineSliceUtil.GetLayout(layoutName) then
-    NineSliceUtil.ApplyLayoutByName(container, layoutName)
-    return true
-  end
-
   local layout = EJ.nineslice.layouts[layoutName]
   if not layout then
     if EJ.Log then EJ.Log("NINESLICE", "MISS layout " .. tostring(layoutName)) end
@@ -311,17 +301,17 @@ EJ.nineslice.AddLayout("InsetFrameTemplate", {
 -- retail's PortraitFrameTemplate layout (NineSliceLayouts.lua:17-28):
 --   TopLeftCorner x=-13 (vs -8 in NoPortrait) to widen the left overhang for
 --   the portrait recess; bottom-left also x=-13 to align with that overhang.
--- Atlas is on FDID 2406979 (already shipped — same sheet as the other corners).
+-- Atlases: Core/AtlasData.lua "Window frame art" (Art/Frame/uiframemetal*.blp, 1x render sizes).
 EJ.nineslice.AddLayout("PortraitFrameTemplate", {
   disableSharpening = true,
-  TopLeftCorner     = { layer = "OVERLAY", atlas = "UI-Frame-PortraitMetal-CornerTopLeft-2x", w = 75, h = 75, x = -13, y = 16 },
-  TopRightCorner    = { layer = "OVERLAY", atlas = "UI-Frame-Metal-CornerTopRight-2x",        w = 75, h = 75, x =   4, y = 16 },
-  BottomLeftCorner  = { layer = "OVERLAY", atlas = "UI-Frame-Metal-CornerBottomLeft-2x",      w = 32, h = 32, x = -13, y = -3 },
-  BottomRightCorner = { layer = "OVERLAY", atlas = "UI-Frame-Metal-CornerBottomRight-2x",     w = 32, h = 32, x =   4, y = -3 },
-  TopEdge    = { layer = "OVERLAY", atlas = "_UI-Frame-Metal-EdgeTop-2x",    h = 75 },
-  BottomEdge = { layer = "OVERLAY", atlas = "_UI-Frame-Metal-EdgeBottom-2x", h = 32 },
-  LeftEdge   = { layer = "OVERLAY", atlas = "!UI-Frame-Metal-EdgeLeft-2x",   w = 75 },
-  RightEdge  = { layer = "OVERLAY", atlas = "!UI-Frame-Metal-EdgeRight-2x",  w = 75 },
+  TopLeftCorner     = { layer = "OVERLAY", atlas = "UI-Frame-PortraitMetal-CornerTopLeft", w = 75, h = 75, x = -13, y = 16 },
+  TopRightCorner    = { layer = "OVERLAY", atlas = "UI-Frame-Metal-CornerTopRight",        w = 75, h = 75, x =   4, y = 16 },
+  BottomLeftCorner  = { layer = "OVERLAY", atlas = "UI-Frame-Metal-CornerBottomLeft",      w = 32, h = 32, x = -13, y = -3 },
+  BottomRightCorner = { layer = "OVERLAY", atlas = "UI-Frame-Metal-CornerBottomRight",     w = 32, h = 32, x =   4, y = -3 },
+  TopEdge    = { layer = "OVERLAY", atlas = "_UI-Frame-Metal-EdgeTop",    h = 75 },
+  BottomEdge = { layer = "OVERLAY", atlas = "_UI-Frame-Metal-EdgeBottom", h = 32 },
+  LeftEdge   = { layer = "OVERLAY", atlas = "!UI-Frame-Metal-EdgeLeft",   w = 75 },
+  RightEdge  = { layer = "OVERLAY", atlas = "!UI-Frame-Metal-EdgeRight",  w = 75 },
 })
 
 -- Dialog — retail's "clean diamond" border (NineSliceLayouts.lua:157 "Dialog", used by

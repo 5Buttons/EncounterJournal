@@ -1,19 +1,16 @@
--- Addon/Core/NavBar.lua — shared breadcrumb NavBar helper, reimplemented for 3.3.5a, with TWO
--- skins (read from EJ.skin at build time):
+-- Addon/Core/NavBar.lua — shared breadcrumb NavBar helper, reimplemented for 3.3.5a. Used by BOTH
+-- UI skins (MoP Classic and Dragonflight draw the same breadcrumb art):
 --
---   CLASSIC (default) — the authentic Encounter Journal breadcrumb: a dark tiled bar (CS_Help
+--   The authentic Encounter Journal breadcrumb: a dark tiled bar (CS_Help
 --     textures), a HOME button with a shadow-overlay cap, overlapping "tab" crumbs joined by ">"
 --     arrows, a ▾ menu-arrow on crumbs that offer a jump list, and an overflow ▾ when the crumbs
 --     don't fit. Ported from the Ascension EJ's 3.3.5-native EJ_NavBarTemplate
 --     (EncounterJournal-main/Frames/NavigationBar/NavigationBar.xml) — art copied to Art/NavBar/.
 --
---   DRAGONFLIGHT — the plain-text breadcrumb ([Home] › [Crumb] › [Crumb ▾]) kept from the
---     original port; a differentiated, lighter-weight variant.
---
 -- 3.3.5a has NO NavBarTemplate / NavButtonTemplate (Cata+ FrameXML; ClassicAPI doesn't ship them),
--- so both skins are built from plain Buttons + textures here.
+-- so it is built from plain Buttons + textures here.
 --
--- USAGE (unchanged across skins — the EncounterJournal/Search.lua consumer doesn't branch):
+-- USAGE:
 --   local navBar = EJ.navbar.Build(parent, {
 --     name = "EJ_FooNavBar", home = { name = HOME, OnClick = fn }, strata = , frameLevel = ,
 --   })
@@ -22,11 +19,6 @@
 
 EJ = EJ or {}
 EJ.navbar = EJ.navbar or {}
-
--- True unless the user explicitly selected the Dragonflight skin (classic is the default/fallback).
-local function classicSkin()
-  return not (EJ.skin and EJ.skin.Is and EJ.skin.Is(EJ.skin.DRAGONFLIGHT))
-end
 
 -- ===========================================================================================
 --  Shared: inset border (ui-frame-inner* @ BORDER/-5) — mirrors retail WorldMapNavBarTemplate.
@@ -63,7 +55,7 @@ function EJ.navbar.BuildInsetBorder(navBar)
 end
 
 -- ===========================================================================================
---  CLASSIC skin — authentic CS_Help breadcrumb.
+--  The CS_Help breadcrumb.
 -- ===========================================================================================
 local ART = "Interface\\AddOns\\EncounterJournal\\Art\\NavBar\\"
 local CS, CST = ART .. "CS_HelpTextures", ART .. "CS_HelpTextures_Tile"
@@ -198,8 +190,8 @@ local function classicLayout(navBar)
   -- Per-crumb state: only the last crumb is the "current" (selected glow, no joiner, disabled).
   for i, b in ipairs(list) do
     local isLast = (i == n)
-    if b.sel then b.sel:SetShown(isLast and i > 1) end
-    if b.arrowUp then b.arrowUp:SetShown(not isLast) end
+    if b.sel then EJ.SetShown(b.sel, isLast and i > 1) end
+    if b.arrowUp then EJ.SetShown(b.arrowUp, not isLast) end
     if b.arrowDown then b.arrowDown:Hide() end
     if b.Disable then if isLast then b:Disable() else b:Enable() end end
   end
@@ -259,7 +251,7 @@ local function classicRefresh(navBar, hierarchy)
       local hasMenu = type(d.listFunc) == "function"
       b._jump = d.OnClick
       b:SetWidth(b.label:GetStringWidth() + (hasMenu and 53 or 30))
-      b.menuArrow:SetShown(hasMenu)
+      EJ.SetShown(b.menuArrow, hasMenu)
       if hasMenu then
         b.menuArrow:SetScript("OnMouseDown", function(self)
           self._pt:SetAlpha(1); self._art:SetPoint("CENTER", -1, -2)
@@ -280,71 +272,7 @@ local function classicRefresh(navBar, hierarchy)
 end
 
 -- ===========================================================================================
---  DRAGONFLIGHT skin — plain-text breadcrumb (the original port).
--- ===========================================================================================
-local DF_CRUMB_H, DF_ARROW_W = 22, 14
-
-local function dfGetSep(navBar, i)
-  local s = navBar._seps[i]
-  if s then return s end
-  s = navBar:CreateFontString(nil, "OVERLAY", "GameFontDisable")
-  s:SetText("›"); navBar._seps[i] = s
-  return s
-end
-
-local function dfGetCrumb(navBar, i)
-  local b = navBar._crumbs[i]
-  if b then return b end
-  b = CreateFrame("Button", nil, navBar)
-  b:SetHeight(DF_CRUMB_H)
-  b.label = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  b.label:SetPoint("LEFT", b, "LEFT", 4, 0); b.label:SetTextColor(1, 0.82, 0)
-  local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(b)
-  hl:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight"); hl:SetBlendMode("ADD"); hl:SetAlpha(0.35)
-  b.arrow = CreateFrame("Button", nil, b)
-  b.arrow:SetSize(DF_ARROW_W, DF_CRUMB_H); b.arrow:SetPoint("LEFT", b.label, "RIGHT", 1, 0)
-  b.arrow.tex = b.arrow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  b.arrow.tex:SetPoint("CENTER", b.arrow, "CENTER", 0, -1); b.arrow.tex:SetText("v"); b.arrow:Hide()
-  navBar._crumbs[i] = b
-  return b
-end
-
-local function dfRefresh(navBar, hierarchy)
-  for _, b in ipairs(navBar._crumbs) do b:Hide() end
-  for _, s in ipairs(navBar._seps)   do s:Hide() end
-  local entries = {}
-  if navBar._home then entries[#entries + 1] = { name = navBar._home.name, OnClick = navBar._home.OnClick } end
-  if hierarchy then for _, d in ipairs(hierarchy) do entries[#entries + 1] = d end end
-
-  local prev
-  for i, d in ipairs(entries) do
-    if i > 1 then
-      local s = dfGetSep(navBar, i); s:ClearAllPoints(); s:SetPoint("LEFT", prev, "RIGHT", 3, 0); s:Show(); prev = s
-    end
-    local b = dfGetCrumb(navBar, i)
-    b.label:SetText(d.name or "")
-    local hasMenu = type(d.listFunc) == "function"
-    if hasMenu then
-      b.arrow:Show()
-      b.arrow:SetScript("OnClick", function()
-        if EJ.dropdown and EJ.dropdown.OpenMenu then EJ.dropdown.OpenMenu(b.arrow, d.listFunc()) end
-      end)
-    else
-      b.arrow:Hide(); b.arrow:SetScript("OnClick", nil)
-    end
-    b:SetScript("OnClick", function()
-      if d.OnClick then d.OnClick()
-      elseif hasMenu and EJ.dropdown and EJ.dropdown.OpenMenu then EJ.dropdown.OpenMenu(b, d.listFunc()) end
-    end)
-    b:SetWidth(b.label:GetStringWidth() + 8 + (hasMenu and (DF_ARROW_W + 1) or 0))
-    b:ClearAllPoints()
-    if prev then b:SetPoint("LEFT", prev, "RIGHT", 3, 0) else b:SetPoint("LEFT", navBar, "LEFT", 6, 0) end
-    b:Show(); prev = b
-  end
-end
-
--- ===========================================================================================
---  Public API — Build / Refresh dispatch on the active skin.
+--  Public API — Build / Refresh.
 -- ===========================================================================================
 function EJ.navbar.Build(parent, opts)
   opts = opts or {}
@@ -353,17 +281,13 @@ function EJ.navbar.Build(parent, opts)
   if opts.frameLevel then navBar:SetFrameLevel(opts.frameLevel) end
   navBar._home   = opts.home
   navBar._crumbs = {}
-  navBar._seps   = {}
-  navBar._classic = classicSkin()
 
-  if navBar._classic then
-    -- dark tiled bar + subtle overlay shade beneath the buttons.
-    local bg = navBar:CreateTexture(nil, "BACKGROUND", nil, 0); bg:SetTexture(CST); bg:SetHorizTile(true); bg:SetAllPoints(navBar); bg:SetTexCoord(unpack(C.barBG))
-    local shade = navBar:CreateTexture(nil, "BACKGROUND", nil, 1); shade:SetTexture(CST); shade:SetHorizTile(true); shade:SetAllPoints(navBar); shade:SetTexCoord(unpack(C.barShade))
-    navBar._bg, navBar._shade = bg, shade
-    navBar._homeBtn = buildClassicHome(navBar, opts)
-    getOverflowButton(navBar)
-  end
+  -- dark tiled bar + subtle overlay shade beneath the buttons.
+  local bg = navBar:CreateTexture(nil, "BACKGROUND", nil, 0); bg:SetTexture(CST); bg:SetHorizTile(true); bg:SetAllPoints(navBar); bg:SetTexCoord(unpack(C.barBG))
+  local shade = navBar:CreateTexture(nil, "BACKGROUND", nil, 1); shade:SetTexture(CST); shade:SetHorizTile(true); shade:SetAllPoints(navBar); shade:SetTexCoord(unpack(C.barShade))
+  navBar._bg, navBar._shade = bg, shade
+  navBar._homeBtn = buildClassicHome(navBar, opts)
+  getOverflowButton(navBar)
 
   EJ.navbar.BuildInsetBorder(navBar)
   return navBar
@@ -371,6 +295,5 @@ end
 
 function EJ.navbar.Refresh(navBar, hierarchy)
   if not navBar then return end
-  if navBar._classic then classicRefresh(navBar, hierarchy)
-  else dfRefresh(navBar, hierarchy) end
+  classicRefresh(navBar, hierarchy)
 end

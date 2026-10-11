@@ -1,16 +1,14 @@
 ## Interface: 30300
 ## Title: Encounter Journal
-## Notes: Adventure Guide for Wrath 3.3.5a — bosses, abilities, loot, and models for classic dungeons and raids.
+## Notes: Adventure Guide for Wrath 3.3.5a — bosses, abilities, loot, and models for dungeons and raids.
 ## Author: Fivebuttons
-## Version: 0.1-alpha
-## Dependencies: !!!ClassicAPI
+## Version: 0.8 Beta
+## OptionalDeps: !!!ClassicAPI, ElvUI
 ## SavedVariables: EncounterJournalDB
 
 Core\Compat.lua
 
-# --- Framework helpers (the EJ.* shared layer the journal calls into) ---
 Core\Core.lua
-Core\Skin.lua
 Core\Modules.lua
 Core\FrameUtil.lua
 Core\PanelManager.lua
@@ -28,19 +26,18 @@ Core\NavBar.lua
 Core\ItemButton.lua
 Core\WorldMap.lua
 Core\LFD.lua
+Core\ElvUI.lua
 
 EncounterJournal\Assets.lua
 EncounterJournal\vanilla_data.lua
 EncounterJournal\tbc_data.lua
 EncounterJournal\wotlk_data.lua
 EncounterJournal\abilities_seed.lua
-EncounterJournal\loot_diff.lua
+EncounterJournal\LootData.lua
 EncounterJournal\item_info.lua
-EncounterJournal\ModelPaths.lua
-EncounterJournal\npc_ids.lua
-EncounterJournal\worldmap_ids.lua
+EncounterJournal\Models.lua
 EncounterJournal\EJApi.lua
-EncounterJournal\ModelCam.lua
+EncounterJournal\Faction.lua
 EncounterJournal\EncounterJournal.lua
 EncounterJournal\EncounterPage.lua
 EncounterJournal\Search.lua

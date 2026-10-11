@@ -107,8 +107,13 @@ M.DEFAULTS = {
   -- left/0, allowOtherPanels). watch: it parents a SECURE close button → protected tree.
   -- skip(): only the MINIMIZED (windowed) map is managed; the maximized map owns the screen
   -- (WorldMap.lua applyDisplayGeometry centres it) and must not hold a tile slot.
+  -- Also skipped when Leatrix Maps is loaded: it makes the map freely movable and restores its
+  -- own saved position on every show, so tiling it here snaps the map back to the panel slot.
   WorldMapFrame        = { area = "left",         pushable = 0, watch = true,
-                           skip = function() return _G.WorldMapFrame and _G.WorldMapFrame._ejMaximized end },
+                           skip = function()
+                             return (_G.WorldMapFrame and _G.WorldMapFrame._ejMaximized)
+                               or IsAddOnLoaded("Leatrix_Maps")
+                           end },
 
   -- ============================ CUSTOM NE_ frames (self-register at build; meta lives here) ======
   EJ_EncounterJournal  = { area = "left",         pushable = 0, width = 830 },
@@ -226,8 +231,8 @@ end
 function M.ScheduleReflow()
   if M._scheduled then return end
   M._scheduled = true
-  if C_Timer and C_Timer.After then
-    C_Timer.After(0, function() M._scheduled = nil; M.Reflow() end)
+  if EJ.After then
+    EJ.After(0, function() M._scheduled = nil; M.Reflow() end)
   else
     M._scheduled = nil; M.Reflow()
   end
@@ -543,9 +548,9 @@ boot:SetScript("OnEvent", function(_, ev)
     if M._deferred then M.Reflow() end
   else
     M.ScanRegister()
-    if C_Timer and C_Timer.After and ev ~= "ADDON_LOADED" then
-      C_Timer.After(2, M.ScanRegister)
-      C_Timer.After(5, M.ScanRegister)
+    if EJ.After and ev ~= "ADDON_LOADED" then
+      EJ.After(2, M.ScanRegister)
+      EJ.After(5, M.ScanRegister)
     end
   end
 end)

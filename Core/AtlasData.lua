@@ -1,7 +1,7 @@
--- Core/AtlasData.lua — retail atlas COORDS + shipped-sheet registration for the modern chrome
--- pieces !!!ClassicAPI does NOT carry: the Dragonflight metal panel tabs, the RedButton close
--- button, the MinimalScrollBar family, the InsetFrameTemplate inner trim and the retail
--- UI-Background-Rock body fill.
+-- Core/AtlasData.lua — atlas COORDS + shipped-sheet registration for every chrome piece the
+-- journal draws: the Dragonflight metal panel tabs, the RedButton close button, the
+-- MinimalScrollBar family, the InsetFrameTemplate inner trim, the retail UI-Background-Rock body
+-- fill, and the window frame art of both skins (end of file).
 --
 -- Core/Texture.lua's EJ.tex.SetAtlas consults the global EJ_ATLAS table FIRST (lowercase atlas
 -- name → { file=<FDID>, left, right, top, bottom, width, height }) and only then falls through to
@@ -105,3 +105,42 @@ reg({
   ["minimal-scrollbar-small-thumb-bottom-over"] = { file = 5142787, left = 0.312500, right = 0.437500, top = 0.687500, bottom = 0.812500, width = 8, height = 8 },
   ["minimal-scrollbar-small-thumb-bottom-down"] = { file = 5142787, left = 0.765625, right = 0.890625, top = 0.484375, bottom = 0.609375, width = 8, height = 8 },
 })
+
+-- ---------------------------------------------------------------------------------------------
+-- Window frame art (both skins), with direct `path` entries instead of FileDataIDs.
+--
+-- DRAGONFLIGHT skin: the retail metal PortraitFrameTemplate nineslice
+-- CLASSIC skin: the Cata/MoP FrameGeneral UI-Frame pieces of the old PortraitFrameTemplate /
+-- ---------------------------------------------------------------------------------------------
+local FRAME   = "Interface\\AddOns\\EncounterJournal\\Art\\Frame\\"
+local CLASSIC = FRAME .. "Classic\\"
+local function px(path, w, h, L, R, T, B, sw, sh)
+  return { path = path, left = L / sw, right = R / sw, top = T / sh, bottom = B / sh, width = w, height = h }
+end
+local function tc(path, w, h, L, R, T, B)
+  return { path = path, left = L, right = R, top = T, bottom = B, width = w, height = h }
+end
+reg({
+  ["UI-Frame-PortraitMetal-CornerTopLeft"] = px(FRAME .. "uiframemetal2x.blp", 75, 75,   1, 151, 153, 303, 512, 512),
+  ["UI-Frame-Metal-CornerTopLeft"]         = px(FRAME .. "uiframemetal2x.blp", 75, 75,   1, 151,   1, 151, 512, 512),
+  ["UI-Frame-Metal-CornerTopRight"]        = px(FRAME .. "uiframemetal2x.blp", 75, 75, 153, 303,   1, 151, 512, 512),
+  ["UI-Frame-Metal-CornerBottomLeft"]      = px(FRAME .. "uiframemetal2x.blp", 32, 32, 153, 217, 153, 217, 512, 512),
+  ["UI-Frame-Metal-CornerBottomRight"]     = px(FRAME .. "uiframemetal2x.blp", 32, 32, 219, 283, 153, 217, 512, 512),
+  ["_UI-Frame-Metal-EdgeTop"]    = px(FRAME .. "uiframemetalhorizontal2x.blp", 32, 75, 0, 64,   1, 151, 64, 256),
+  ["_UI-Frame-Metal-EdgeBottom"] = px(FRAME .. "uiframemetalhorizontal2x.blp", 16, 32, 0, 32, 153, 217, 64, 256),
+  ["!UI-Frame-Metal-EdgeLeft"]   = px(FRAME .. "uiframemetalvertical2x.blp", 75, 16,   1, 151, 0, 32, 512, 32),
+  ["!UI-Frame-Metal-EdgeRight"]  = px(FRAME .. "uiframemetalvertical2x.blp", 75, 16, 153, 303, 0, 32, 512, 32),
+  ["_UI-Frame-TopTileStreaks"]   = px(FRAME .. "uiframehorizontal.blp", 256, 43, 0, 256, 1, 44, 256, 128),
+
+  ["classic-UI-Frame-Portrait"]        = tc(CLASSIC .. "UI-Frame",  78,  78, 0.0078125, 0.6171875, 0.0078125, 0.6171875),
+  ["classic-UI-Frame-TopCornerRight"]  = tc(CLASSIC .. "UI-Frame",  33,  33, 0.6328125, 0.890625,  0.0078125, 0.265625),
+  ["classic-UI-Frame-BotCornerLeft"]   = tc(CLASSIC .. "UI-Frame",  14,  14, 0.0078125, 0.1171875, 0.6328125, 0.7421875),
+  ["classic-UI-Frame-BotCornerRight"]  = tc(CLASSIC .. "UI-Frame",  11,  11, 0.1328125, 0.21875,   0.8984375, 0.984375),
+  ["classic-_UI-Frame-TitleTileBg"]    = tc(CLASSIC .. "_UI-Frame", 256, 17, 0, 1, 0.2890625, 0.421875),
+  ["classic-_UI-Frame-TitleTile"]      = tc(CLASSIC .. "_UI-Frame", 256, 28, 0, 1, 0.4375,    0.65625),
+  ["classic-_UI-Frame-TopTileStreaks"] = tc(CLASSIC .. "_UI-Frame", 256, 37, 0, 1, 0.671875,  0.9609375),
+  ["classic-_UI-Frame-Bot"]            = tc(CLASSIC .. "_UI-Frame", 256,  9, 0, 1, 0.203125,  0.2734375),
+  ["classic-!UI-Frame-LeftTile"]       = tc(CLASSIC .. "!UI-Frame", 16, 256, 0.359375, 0.609375, 0, 1),
+  ["classic-!UI-Frame-RightTile"]      = tc(CLASSIC .. "!UI-Frame", 10, 256, 0.171875, 0.328125, 0, 1),
+})
+EJ.tex.CLASSIC_ROCK = CLASSIC .. "UI-Background-Rock"

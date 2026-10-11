@@ -65,18 +65,112 @@ local function persistTier(t)
   EJ.db.ej.tier = t
 end
 
--- Window chrome — the NewEra recipe: rock body + TopTileStreaks + metal nineslice (ClassicAPI's
--- PortraitFrameTemplate layout over the real retail sheets Core/Compat.lua registers) + round
--- portrait + title band + RedButton close + the black inset well.
+local function classicSkin() return EJ.skin and EJ.skin.Is(EJ.skin.CLASSIC) end
+
+-- Inset (recessed content well). retail: TOPRIGHT(-4,-60) BOTTOMLEFT(4,5). The thin gold inner
+-- border is our nineslice "InsetFrameTemplate" layout (Core/NineSlice.lua, retail inner-trim
+-- atlases in Core/AtlasData.lua); the fill is the near-black well the journal sits the tier art
+-- in. Same in both skins.
+local function buildInset(f)
+  local inset = CreateFrame("Frame", "EJ_EncounterJournalInset", f)
+  inset:SetPoint("TOPRIGHT",   f, "TOPRIGHT",   -4, -60)
+  inset:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT",  4,  5)
+  local bg = inset:CreateTexture("EJ_EncounterJournalInsetBg", "BACKGROUND", nil, -5)
+  bg:SetAllPoints(inset)
+  bg:SetTexture(0, 0, 0, 0.85)   -- 3.3.5 solid-colour SetTexture(r,g,b,a)
+  inset.Bg = bg
+  EJ.nineslice.ApplyLayout(inset, "InsetFrameTemplate")
+  f.inset = inset
+end
+
+-- Window chrome, CLASSIC skin — the MoP Classic look: the Cata/MoP FrameGeneral UI-Frame border
+-- (portrait ring, title bar, corners, side tiles), rock Bg, TopTileStreaks, title and the native
+-- red-square close button. Rebuilt piece for piece from Blizzard's 4.x PortraitFrameTemplate
+-- (same anchors and sizes) over our own copies of the art (Art/Frame/Classic, atlases
+-- "classic-*" in Core/AtlasData.lua), so it needs no template library.
+local function buildClassicChrome(f)
+  local function piece(layer, sub, atlas, w, h)
+    local t = f:CreateTexture(nil, layer, nil, sub)
+    EJ.tex.SetAtlas(t, atlas, false)
+    if w then t:SetWidth(w) end
+    if h then t:SetHeight(h) end
+    return t
+  end
+
+  local bg = f:CreateTexture(nil, "BACKGROUND", nil, -6)
+  bg:SetTexture(EJ.tex.CLASSIC_ROCK)
+  bg:SetHorizTile(true); bg:SetVertTile(true)
+  bg:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -21)
+  bg:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
+  f.Bg = bg
+
+  -- title-bar fill behind the title text (4.x $parentTitleBg: BACKGROUND, TOPLEFT(2,-3)/TOPRIGHT(-25,-3))
+  local titleBg = piece("BACKGROUND", 0, "classic-_UI-Frame-TitleTileBg", nil, 17)
+  titleBg:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -3)
+  titleBg:SetPoint("TOPRIGHT", f, "TOPRIGHT", -25, -3)
+
+  -- portrait (60x60) under the ring — the pre-masked round journal icon (no masking on 3.3.5)
+  local portrait = f:CreateTexture(nil, "OVERLAY", nil, -1)
+  portrait:SetSize(60, 60)
+  portrait:SetPoint("TOPLEFT", f, "TOPLEFT", -6, 7)
+  portrait:SetTexture(ART_EJ .. "ui-ej-portraiticon-round.tga")
+  f.Portrait = portrait
+
+  local ring = piece("OVERLAY", 0, "classic-UI-Frame-Portrait", 78, 78)
+  ring:SetPoint("TOPLEFT", f, "TOPLEFT", -14, 11)
+  local topRight = piece("OVERLAY", 0, "classic-UI-Frame-TopCornerRight", 33, 33)
+  topRight:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 1)
+  local top = piece("OVERLAY", 0, "classic-_UI-Frame-TitleTile", nil, 28)
+  top:SetPoint("TOPLEFT", ring, "TOPRIGHT", 0, -10)
+  top:SetPoint("TOPRIGHT", topRight, "TOPLEFT", 0, 0)
+
+  local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  title:SetPoint("TOP", f, "TOP", 0, -4)
+  title:SetPoint("LEFT", f, "LEFT", 60, 0)
+  title:SetPoint("RIGHT", f, "RIGHT", -60, 0)
+  title:SetText(ADVENTURE_JOURNAL or "Adventure Guide")
+  f.Title = title
+
+  local streaks = piece("BORDER", 0, "classic-_UI-Frame-TopTileStreaks", nil, 37)
+  streaks:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -21)
+  streaks:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -21)
+  local botLeft = piece("BORDER", 0, "classic-UI-Frame-BotCornerLeft", 14, 14)
+  botLeft:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", -6, -5)
+  local botRight = piece("BORDER", 0, "classic-UI-Frame-BotCornerRight", 11, 11)
+  botRight:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, -5)
+  local bottom = piece("BORDER", 0, "classic-_UI-Frame-Bot", nil, 9)
+  bottom:SetPoint("BOTTOMLEFT", botLeft, "BOTTOMRIGHT", 0, 0)
+  bottom:SetPoint("BOTTOMRIGHT", botRight, "BOTTOMLEFT", 0, 0)
+  local left = piece("BORDER", 0, "classic-!UI-Frame-LeftTile", 16, nil)
+  left:SetPoint("TOPLEFT", ring, "BOTTOMLEFT", 8, 0)
+  left:SetPoint("BOTTOMLEFT", botLeft, "TOPLEFT", 0, 0)
+  local right = piece("BORDER", 0, "classic-!UI-Frame-RightTile", 10, nil)
+  right:SetPoint("TOPRIGHT", topRight, "BOTTOMRIGHT", 1, 0)
+  right:SetPoint("BOTTOMRIGHT", botRight, "TOPRIGHT", 0, 0)
+
+  -- UIPanelCloseButton's stock OnClick is HideParentPanel → HideUIPanel; this window is a plain
+  -- toplevel frame (not a UIPanel), so hide it directly. Raised above the content pages.
+  local close = CreateFrame("Button", "EJ_EncounterJournalCloseButton", f, "UIPanelCloseButton")
+  close:SetPoint("TOPRIGHT", f, "TOPRIGHT", 4, 5)
+  close:SetScript("OnClick", function() f:Hide() end)
+  close:SetFrameLevel(f:GetFrameLevel() + 10)
+  f.CloseButton = close
+
+  buildInset(f)
+end
+
+-- Window chrome, DRAGONFLIGHT skin — the NewEra recipe: rock body + TopTileStreaks + metal
+-- nineslice (our PortraitFrameTemplate layout over the real retail sheets Core/AtlasData.lua
+-- registers) + round portrait + title band + RedButton close + the black inset well.
 local function buildChrome(f)
+  if classicSkin() then return buildClassicChrome(f) end
   -- 0. Body fill — the retail UI-Background-Rock (FDID 374155) shipped under Art\Common and
   -- registered by Core/AtlasData.lua; drawn untinted (the "modern grey" every NewEra window has).
   -- BACKGROUND sublevel -6, TOPLEFT(4,-21)/BOTTOMRIGHT(0,0): the metal border covers the edges at
-  -- OVERLAY, and a wider inset left a see-through gap at the sides. Falls back to ClassicAPI's
+  -- OVERLAY, and a wider inset left a see-through gap at the sides. Falls back to the classic
   -- rock tile, then to a flat dark fill.
   local body = f:CreateTexture(nil, "BACKGROUND", nil, -6)
-  local rock = (EJ.tex.localFiles and EJ.tex.localFiles[374155])
-    or "Interface\\AddOns\\!!!ClassicAPI\\Texture\\FrameGeneral\\UI-Background-Rock"
+  local rock = (EJ.tex.localFiles and EJ.tex.localFiles[374155]) or EJ.tex.CLASSIC_ROCK
   if not pcall(function()
     body:SetTexture(rock)
     body:SetHorizTile(true); body:SetVertTile(true)
@@ -130,17 +224,8 @@ local function buildChrome(f)
   EJ.panelchrome.ModernizeCloseButton(close)
   f.CloseButton = close
 
-  -- 5. Inset (recessed content well). retail: TOPRIGHT(-4,-60) BOTTOMLEFT(4,5). ClassicAPI's
-  -- template supplies the thin gold inner border; its marble fill is swapped for the near-black
-  -- well the retail journal (and NewEra) sit the tier art in.
-  local inset = CreateFrame("Frame", "EJ_EncounterJournalInset", f, "InsetFrameTemplate")
-  inset:SetPoint("TOPRIGHT",   f, "TOPRIGHT",   -4, -60)
-  inset:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT",  4,  5)
-  local insetBg = inset.Bg or _G["EJ_EncounterJournalInsetBg"]
-  if insetBg and insetBg.SetTexture then
-    pcall(function() insetBg:SetTexture(0, 0, 0, 0.85) end)
-  end
-  f.inset = inset
+  -- 5. Inset.
+  buildInset(f)
 end
 
 -- Instance-select page (the dungeon/raid grid landing).
@@ -332,20 +417,25 @@ local function buildInstanceSelect(f)
   raidTab:SetText(RAIDS or "Raids")
   page.dunTab, page.raidTab = dunTab, raidTab
 
+  -- Classic skin keeps the native red tab art (the MoP look) and its PanelTemplates sizing.
+  local classic = classicSkin()
   local reskinned = false
-  if EJ.tabs and EJ.tabs.ReskinClassicTab then
+  if not classic and EJ.tabs and EJ.tabs.ReskinClassicTab then
     local ok1, r1 = pcall(EJ.tabs.ReskinClassicTab, "EJ_EJDungeonsTab")
     local ok2, r2 = pcall(EJ.tabs.ReskinClassicTab, "EJ_EJRaidsTab")
     reskinned = (ok1 and r1 and ok2 and r2) and true or false
   end
 
   local function sizeTab(tab)
-    if EJ.tabs and EJ.tabs.SizeToText then EJ.tabs.SizeToText(tab)
+    -- the classic pieces have a fixed-width Middle that only PanelTemplates_TabResize stretches
+    if not reskinned and PanelTemplates_TabResize then PanelTemplates_TabResize(tab, 0)
+    elseif EJ.tabs and EJ.tabs.SizeToText then EJ.tabs.SizeToText(tab)
     elseif EJ.tabs and EJ.tabs.ResizeTabMinimum then EJ.tabs.ResizeTabMinimum(tab) end
   end
   local function rechainTabs()
     dunTab:ClearAllPoints();  dunTab:SetPoint("TOPLEFT", f, "BOTTOMLEFT", 11, 2)
-    raidTab:ClearAllPoints(); raidTab:SetPoint("TOPLEFT", dunTab, "TOPRIGHT", 1, 0)
+    -- classic tab art has transparent shoulders, so neighbours overlap (FriendsFrame uses -15)
+    raidTab:ClearAllPoints(); raidTab:SetPoint("TOPLEFT", dunTab, "TOPRIGHT", reskinned and 1 or -15, 0)
   end
   local function setTabArt(tab, selected)
     if reskinned and EJ.tabs.SetActive then
@@ -430,13 +520,14 @@ end
 local frame
 local function build()
   if frame then return frame end
+  -- Plain frame; both skins build their chrome by hand (buildClassicChrome / buildChrome).
   frame = CreateFrame("Frame", "EJ_EncounterJournal", UIParent)
   frame:SetSize(FRAME_W, FRAME_H)
   frame:SetPoint("CENTER")
   frame:SetFrameStrata("MEDIUM")   -- retail EncounterJournal: MEDIUM (default) + toplevel (Blizzard_EncounterJournal.xml:1333)
   frame:SetToplevel(true)
   -- Retail EJ open/close (Mainline/Blizzard_EncounterJournal.lua:751 + OnHide) — vanilla-native kits.
-  EJ.FrameUtil.WirePanelSounds(frame, SOUNDKIT.IG_CHARACTER_INFO_OPEN, SOUNDKIT.IG_CHARACTER_INFO_CLOSE)
+  EJ.FrameUtil.WirePanelSounds(frame, "igCharacterInfoOpen", "igCharacterInfoClose")
   frame:EnableMouse(true)       -- panel: swallow clicks so they don't fall through
   frame:SetClampedToScreen(true)
   -- Drag anywhere on the body (child buttons keep their own clicks). Installed BEFORE the panel
@@ -480,7 +571,7 @@ local function build()
       if page and page:IsShown() and page.applyInstanceFilter then page.applyInstanceFilter() end
     end
     refresh()
-    if C_Timer and C_Timer.After then C_Timer.After(0, refresh) end
+    if EJ.After then EJ.After(0, refresh) end
   end)
 
   pinScale(frame)
@@ -560,6 +651,7 @@ end
 -- UI-MicroButton-EJ art slotted into the micro-button row in its retail position (after LFG,
 -- before Main Menu), with the whole row tightened to make room — the proven AzerPUGs sequence
 -- (its 3.4 MainMenuBar matches 3.3.5a's). Every reposition is guarded on its frame existing.
+local stockMicroLayout   -- defined below
 local function setupMicroButton()
   if EJ.ej._microButton then return end
   if not _G.MainMenuBar then return end
@@ -594,8 +686,15 @@ local function setupMicroButton()
     EJ.tooltip.Wire(b, ADVENTURE_JOURNAL or "Adventure Guide")
   end
 
-  -- Re-lay the micro-button row, inserting ours, exactly as AzerPUGs does. Guarded so a missing
-  -- or renamed button (bar addons) can't error out the chain.
+  EJ.ej._microButton = b
+  -- ElvUI owns the micro buttons (its own bar + layout): hand ours over instead (Core/ElvUI.lua).
+  if EJ.elvui and EJ.elvui.AttachMicroButton(b, function() stockMicroLayout(b) end) then return end
+  stockMicroLayout(b)
+end
+
+-- Re-lay the stock micro-button row, inserting ours, exactly as AzerPUGs does. Guarded so a missing
+-- or renamed button (bar addons) can't error out the chain.
+stockMicroLayout = function(b)
   local function anchor(name, relName, x)
     local fr, rel = _G[name], _G[relName]
     if fr and rel then fr:ClearAllPoints(); fr:SetPoint("BOTTOMLEFT", rel, "BOTTOMRIGHT", x, 0) end
@@ -617,15 +716,12 @@ local function setupMicroButton()
   b:SetPoint("BOTTOMLEFT", (lfdName and _G[lfdName]) or _G.PVPMicroButton or _G.SocialsMicroButton, "BOTTOMRIGHT", -4, 0)
   anchor("MainMenuMicroButton",    "EJ_EJMicroButton",       -5)
   anchor("HelpMicroButton",        "MainMenuMicroButton",    -4)
-
-  EJ.ej._microButton = b
 end
 
 -- ── Openers ──────────────────────────────────────────────────────────────────────────────
 -- Registered at FILE SCOPE (the instant this file loads), NOT inside the per-login module boot,
 -- so they exist even if build() or the module dispatcher errors. If even these do nothing after
--- a /reload, the addon itself isn't loading — check that !!!ClassicAPI (the hard dependency) is
--- installed AND enabled in the AddOns list.
+-- a /reload, the addon itself isn't loading — check that it is enabled in the AddOns list.
 --
 -- TAINT: safe + additive. Era/3.3.5 ships no ToggleEncounterJournal (EJ is Wrath+), so this
 -- CREATES a global the client lacks rather than overwriting Blizzard's; the ~="function" guard
@@ -664,13 +760,15 @@ if _G.SlashCmdList then
       end
       return
     end
+    if cmd == "faction" and EJ.ej.SetFactionMode then EJ.ej.SetFactionMode(string.lower(arg)); return end
     if cmd == "help" or cmd == "?" then
       if cf then
         cf:AddMessage("|cff66ccffEncounterJournal|r commands:")
         cf:AddMessage("  |cffffd200/ej|r — toggle the journal")
         cf:AddMessage("  |cffffd200/ej scale <0.5-2.0>|r — window size (drag the window to move it; |cffffd200/ej resetpos|r puts it back)")
         cf:AddMessage("  |cffffd200/ej model x|y|z|facing|scale <n> · global <n> · npc <id> · path <file> · display <id> · mode creature|file|auto|display · reset|r — tune the shown boss model (mouse wheel over the model = zoom, drag = rotate)")
-        cf:AddMessage("  |cffffd200/ej skin classic|dragonflight|r")
+        cf:AddMessage("  |cffffd200/ej skin dragonflight|classic|r — DragonUI look or the MoP Classic look (reloads)")
+        cf:AddMessage("  |cffffd200/ej faction auto|all|r — only your faction's bosses/loot (auto) or both")
       end
       return
     end
@@ -682,7 +780,8 @@ if _G.SlashCmdList then
 end
 
 -- One-time load confirmation (diagnostic + tells the user how to open it). If you DON'T see this
--- line at login, this file isn't loading — almost always a missing/disabled !!!ClassicAPI.
+-- line at login, this file isn't loading (a Lua error earlier in the load order, or the addon is
+-- disabled).
 if _G.DEFAULT_CHAT_FRAME then
   _G.DEFAULT_CHAT_FRAME:AddMessage("|cff66ccffEncounterJournal|r loaded — open with |cffffd200/ej|r or the book button on the menu bar (|cffffd200/ej help|r).")
 end
@@ -702,6 +801,7 @@ EJ.modules.Register("EncounterJournal", {
           _G.DEFAULT_CHAT_FRAME:AddMessage("|cffff5555EncounterJournal " .. tag .. " error:|r " .. tostring(err))
         end
       end
+      if EJ.ej.ApplyFaction then report("faction", EJ.ej.ApplyFaction) end   -- before build: prunes the data the window reads
       report("microbutton", setupMicroButton)
       report("build", build)
     elseif frame then

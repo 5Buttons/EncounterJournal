@@ -20,6 +20,11 @@ local function sliceTex(parent, slice, layer, setSize)
   return t
 end
 
+-- Model tab switch. OFF for now: many boss models render broken on 3.3.5a (humanoids above all —
+-- see the model-loading notes), so the tab is greyed out and unclickable. The model code below
+-- stays intact; flip this to true to bring the tab back.
+EJ.ej.MODEL_TAB_ENABLED = false
+
 local function makeTab(parent, id, iconSel, iconUnsel, tip)
   local t = CreateFrame("Button", nil, parent)
   t:SetSize(63, 57)
@@ -157,18 +162,36 @@ local function buildInfoPanel(enc)
   p.instanceTitle:SetPoint("TOPLEFT", p, "TOPLEFT", 70, -16)
   p.instanceTitle:SetWidth(310); p.instanceTitle:SetJustifyH("LEFT"); p.instanceTitle:SetTextColor(1, 0.82, 0)
   EJ.font.Set(p.instanceTitle, EJ.font.MORPHEUS, 16, "", GameFontNormal)
+  -- Boss name — retail/MoP spec (Blizzard_EncounterJournal.xml encounterTitle): GameFontNormalLarge,
+  -- justifyH LEFT, BOTTOMLEFT at the page's TOPRIGHT(-350,-36), beige (0.902,0.788,0.671), 220 wide
+  -- with AutoScalingFontStringMixin (minLineHeight 9) shrinking long names. 3.3.5 has no such mixin,
+  -- so p.SetEncounterTitle steps the font size down instead. Width 190 (not 220): the title spans
+  -- x 435-625 of the 785 page, clear of the difficulty dropdown's visible button (~633+).
+  local ENC_TITLE_W, ENC_TITLE_MIN = 190, 9
   p.encounterTitle = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  p.encounterTitle:SetPoint("TOPLEFT", p, "TOPLEFT", 400, -14)
-  p.encounterTitle:SetWidth(360); p.encounterTitle:SetJustifyH("CENTER"); p.encounterTitle:SetTextColor(1, 0.82, 0)
-  EJ.font.Set(p.encounterTitle, EJ.font.MORPHEUS, 18, "", GameFontNormalLarge)
+  p.encounterTitle:SetPoint("BOTTOMLEFT", p, "TOPRIGHT", -350, -36)
+  p.encounterTitle:SetWidth(ENC_TITLE_W); p.encounterTitle:SetJustifyH("LEFT")
+  p.encounterTitle:SetTextColor(0.902, 0.788, 0.671)
+  if p.encounterTitle.SetWordWrap then p.encounterTitle:SetWordWrap(false) end
+  local encFont, encSize, encFlags = p.encounterTitle:GetFont()
+  function p.SetEncounterTitle(text)
+    local fs = p.encounterTitle
+    if not encFont then fs:SetText(text or ""); return end
+    local size = encSize
+    fs:SetFont(encFont, size, encFlags); fs:SetText(text or "")
+    while size > ENC_TITLE_MIN and fs:GetStringWidth() > ENC_TITLE_W do
+      size = size - 1
+      fs:SetFont(encFont, size, encFlags)
+    end
+  end
 
   -- Loot slot-filter dropdown (right page header; shown only on the Loot tab — retail's
   -- ItemSlotFilterType selector). Fully pcall-wrapped: it's non-critical chrome, and an error
   -- here must NOT abort buildInfoPanel (which would skip the lore-panel build → blank landing).
   pcall(function()
     if not (EJ.dropdown and EJ.dropdown.New) then return end
-    local lootFilter = EJ.dropdown.New(p, nil, { width = 130 })
-    lootFilter:SetPoint("TOPRIGHT", p, "TOPRIGHT", -14, -12)
+    local lootFilter = EJ.dropdown.New(p, nil, { width = 75 })
+    lootFilter:SetPoint("TOPRIGHT", p, "TOPRIGHT", -14, -12)   -- re-anchored in p.LayoutFilters
     lootFilter:SetDefaultText(ALL or "All")
     lootFilter:SetupMenu(function(dropdown, root)
       -- Only offer the slot categories the current loot actually has (retail skips empty ones),
@@ -192,13 +215,13 @@ local function buildInfoPanel(enc)
     lootFilter:Hide()
     p.lootFilter = lootFilter
 
-    -- Quick-clear "X" — only up while a real slot filter is active. Anchored off the dropdown's
-    -- own arrow BUTTON: UIDropDownMenuTemplate's frame edges sit ~16px outside the visible box,
-    -- so "RIGHT of the frame" would leave a conspicuous gap.
+    -- Quick-clear "X" — only up while a real slot filter is active. Sits LEFT of the slot box
+    -- (the difficulty selector is its right-hand neighbour, MoP order); UIDropDownMenuTemplate's
+    -- frame edge lies ~16px outside the visible box, hence the inward offset. p.LayoutFilters
+    -- pushes the class dropdown further left while it is shown.
     local clear = CreateFrame("Button", nil, lootFilter)
     clear:SetSize(16, 16)
-    local ddArrow = lootFilter.GetName and _G[lootFilter:GetName() .. "Button"]
-    clear:SetPoint("LEFT", ddArrow or lootFilter, "RIGHT", 4, 0)
+    clear:SetPoint("RIGHT", lootFilter, "LEFT", 16, 2)
     local ctex = clear:CreateTexture(nil, "OVERLAY")
     ctex:SetAllPoints(clear)
     if not (EJ.tex and EJ.tex.SetAtlas and EJ.tex.SetAtlas(ctex, "common-search-clearbutton", false)) then
@@ -240,9 +263,8 @@ local function buildInfoPanel(enc)
   -- the anchor and the visibility (Loot tab + boss Abilities pages, only when ≥2 buckets).
   pcall(function()
     if not (EJ.dropdown and EJ.dropdown.New) then return end
-    local diffFilter = EJ.dropdown.New(p, nil, { width = 120 })
-    if p.lootFilter then diffFilter:SetPoint("TOPRIGHT", p.lootFilter, "TOPLEFT", -6, 0)
-    else diffFilter:SetPoint("TOPRIGHT", p, "TOPRIGHT", -14, -12) end
+    local diffFilter = EJ.dropdown.New(p, nil, { width = 105 })
+    diffFilter:SetPoint("TOPRIGHT", p, "TOPRIGHT", -14, -12)
     diffFilter:SetupMenu(function(dropdown, root)
       for _, b in ipairs(p.lootDiffsAvail or {}) do
         local label = EJ.ej.DIFF_LABEL[b] or tostring(b)
@@ -262,13 +284,44 @@ local function buildInfoPanel(enc)
     p.difficultyFilter = diffFilter
   end)
 
+  -- Class dropdown label in the chosen class's colour (MoP Classic does this); "All Classes" in
+  -- the normal dropdown white. CUSTOM_CLASS_COLORS (!ClassColors etc.) wins over RAID_CLASS_COLORS.
+  function p.ColorClassFilter()
+    local dd = p.classFilter
+    local fs = dd and dd.GetName and dd:GetName() and _G[dd:GetName() .. "Text"]
+    if not fs then return end
+    local tag = p.lootClass or "ALL"
+    local c = (_G.CUSTOM_CLASS_COLORS and _G.CUSTOM_CLASS_COLORS[tag]) or (_G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[tag])
+    if c then fs:SetTextColor(c.r, c.g, c.b) else fs:SetTextColor(1, 1, 1) end
+  end
+
+  -- Header filter row, MoP Classic order, right to left: Difficulty · Slot · Class. Each one
+  -- anchors to its visible right-hand neighbour, so hiding the difficulty selector (single-
+  -- difficulty instances) slides the others right without a gap. UIDropDownMenuTemplate frames
+  -- carry ~16px of transparent padding per side, so neighbours overlap by FILTER_GAP to leave a
+  -- small visible gap. Called by refreshView after it has decided what is shown.
+  local FILTER_GAP = 22
+  function p.LayoutFilters()
+    local right, x = nil, 0
+    local function place(dd, extra)
+      if not (dd and dd:IsShown()) then return end
+      dd:ClearAllPoints()
+      if right then dd:SetPoint("TOPRIGHT", right, "TOPLEFT", FILTER_GAP - (extra or 0), 0)
+      else dd:SetPoint("TOPRIGHT", p, "TOPRIGHT", -14, -12) end
+      right = dd
+    end
+    place(p.difficultyFilter)
+    place(p.lootFilter)
+    place(p.classFilter, (p.lootFilterClear and p.lootFilterClear:IsShown()) and 16 or 0)
+  end
+
   -- Loot CLASS dropdown (leftmost of the loot filters). Approximate class-usability filter;
   -- default = the player's class. Position is finalised in renderLoot (left of the difficulty
   -- filter when it's shown, else left of the slot filter) so there's no gap.
   pcall(function()
     if not (EJ.dropdown and EJ.dropdown.New) then return end
-    local classFilter = EJ.dropdown.New(p, nil, { width = 110 })
-    classFilter:SetPoint("TOPRIGHT", p, "TOPRIGHT", -14, -12)   -- re-anchored in renderLoot
+    local classFilter = EJ.dropdown.New(p, nil, { width = 90 })
+    classFilter:SetPoint("TOPRIGHT", p, "TOPRIGHT", -14, -12)   -- re-anchored in p.LayoutFilters
     local _, playerClass = UnitClass("player")
     p.lootClass = p.lootClass or playerClass or "ALL"
     classFilter:SetupMenu(function(dropdown, root)
@@ -279,6 +332,7 @@ local function buildInfoPanel(enc)
           function()
             p.lootClass = tag
             if dropdown.SetDefaultText then dropdown:SetDefaultText(label) end
+            p.ColorClassFilter()
             if EJ.ej.SelectTab then EJ.ej.SelectTab(p.selectedTab or 2) end
           end)
       end
@@ -288,6 +342,7 @@ local function buildInfoPanel(enc)
     end
     classFilter:Hide()
     p.classFilter = classFilter
+    p.ColorClassFilter()
   end)
 
   -- model/instance button (top-left) → back to the instance overview (retail parity)
@@ -325,7 +380,8 @@ local function buildInfoPanel(enc)
   -- tab 3 created for index stability but never shown/enabled (collapsed into tab 1, per retail).
   local boss = makeTab(p, 3, "UI-EJ-Tab-AbilitiesIcon-Selected", "UI-EJ-Tab-AbilitiesIcon-UnSelected", ABILITIES or "Abilities")
   boss:Hide()
-  local model = makeTab(p, 4, "UI-EJ-Tab-ModelIcon-Selected",    "UI-EJ-Tab-ModelIcon-UnSelected", MODEL or "Model")
+  local model = makeTab(p, 4, "UI-EJ-Tab-ModelIcon-Selected",    "UI-EJ-Tab-ModelIcon-UnSelected",
+    EJ.ej.MODEL_TAB_ENABLED and (MODEL or "Model") or ((MODEL or "Model") .. " (disabled for now)"))
   model:SetPoint("TOP", loot, "BOTTOM", 0, 2)
   p.tabs = { overview, loot, boss, model }
 
@@ -541,7 +597,7 @@ local function buildInfoPanel(enc)
         local plate = (cr.file and cr.file > 0) and cr.file or 521744   -- generic plate fallback
         cb.tex:SetTexture(EJ.tex.localFiles[plate] or plate)
         cb.tex:SetTexCoord(0, 0.5, 0, 1)
-        cb.sel:SetShown(i == (ma._activeCreature or 1))
+        EJ.SetShown(cb.sel, i == (ma._activeCreature or 1))
         cb:Show()
       end
     end
@@ -605,7 +661,11 @@ local function fillBossList(inst)
     b.enc = enc
     local cr = enc.creatures and enc.creatures[1]
     if cr and cr.file and cr.file > 0 then
-      b.creature:SetTexture(EJ.tex.localFiles[cr.file] or cr.file)
+      -- 3.3.5a's SetTexture returns nil for a missing file and KEEPS the old image — on a pooled
+      -- button that is the previous instance's boss. Fall back to the generic plate instead.
+      if not b.creature:SetTexture(EJ.tex.localFiles[cr.file] or cr.file) then
+        b.creature:SetTexture(EJ.tex.localFiles[521744])
+      end
       b.creature:SetTexCoord(0, 1, 0, 1)
       b.creature:Show()
     else
@@ -629,14 +689,6 @@ end
 -- bounded by THAT item resolving. warmLoot() is a BOUNDED batch warm used only when a class filter
 -- is active (the filter needs item types). Forward-declared so earlier functions can call them.
 local loadLootItem, warmLoot
--- The DB2 loot list can carry retail itemIDs that don't exist on this 3.3.5 client/server (e.g.
--- Timewalking rewards). ClassicAPI's RequestLoadItemDataByID THROWS on such IDs (its Item:
--- ContinueOnLoad rejects the empty item), which would abort the whole loot render — so guard it.
-local function safeRequestItem(id)
-  if id and C_Item and C_Item.RequestLoadItemDataByID then
-    pcall(C_Item.RequestLoadItemDataByID, id)
-  end
-end
 -- Loot row = retail EncounterItemTemplate (EJ.xml:1078-1129): 321x45, icon 42x42 TOPLEFT(2,-2),
 -- name top, slot bottom-left, armor/weapon type bottom-right, UI-EJ-LootFrame row bg, quality
 -- WhiteIconFrame border. Icon/row hover → item tooltip.
@@ -672,10 +724,10 @@ local function lootRow(lf, i)
   r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   r:SetScript("OnClick", function(self, button)
     if self.link and HandleModifiedItemClick(self.link) then
-      PlaySound(SOUNDKIT.IG_MAINMENU_OPTION); return
+      PlaySound("igMainMenuOption"); return
     end
     if button == "RightButton" and self.itemID and not GetItemInfo(self.itemID) and loadLootItem then
-      PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+      PlaySound("igMainMenuOptionCheckBoxOn")
       loadLootItem(self.itemID)
     end
   end)
@@ -683,7 +735,7 @@ local function lootRow(lf, i)
     if not self.itemID then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     if GetItemInfo(self.itemID) then
-      if pcall(GameTooltip.SetItemByID, GameTooltip, self.itemID) then GameTooltip:Show() end  -- unknown retail IDs throw
+      if EJ.SetTooltipItem(GameTooltip, self.itemID) then GameTooltip:Show() end
     else
       -- SetItemByID/SetHyperlink on an uncached id would query the server behind the player's
       -- back; show a plain notice instead so the load stays an explicit right-click.
@@ -778,10 +830,11 @@ end
 EJ.ej.DIFF_LABEL = {
   [1] = _G.PLAYER_DIFFICULTY1 or "Normal",
   [2] = _G.PLAYER_DIFFICULTY2 or "Heroic",
-  [3] = "10 Player",
-  [4] = "25 Player",
-  [5] = "10 Player (Heroic)",
-  [6] = "25 Player (Heroic)",
+  -- short raid labels (MoP Classic's "(10) Heroic" style) so the header filter row fits one page
+  [3] = "10 " .. (_G.PLAYER_DIFFICULTY1 or "Normal"),
+  [4] = "25 " .. (_G.PLAYER_DIFFICULTY1 or "Normal"),
+  [5] = "10 " .. (_G.PLAYER_DIFFICULTY2 or "Heroic"),
+  [6] = "25 " .. (_G.PLAYER_DIFFICULTY2 or "Heroic"),
 }
 local HEROIC_BUCKET = { [2] = true, [5] = true, [6] = true }   -- 5-man Heroic / 10H / 25H
 
@@ -915,26 +968,50 @@ function EJ.ej.PresentLootCategories(items, info)
   return present
 end
 
+-- Loot sub-header (LootData.lua: Ulduar "Hard Mode", Yogg-Saron's keeper tiers): a title in
+-- the parchment ink colour over a thin rule, the width of a loot row.
+local LOOT_HEADER_H = 30
+local function lootHeader(lf, i)
+  lf.headers = lf.headers or {}
+  local h = lf.headers[i]
+  if h then return h end
+  h = CreateFrame("Frame", nil, lf)
+  h:SetSize(321, LOOT_HEADER_H)
+  h.text = h:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  h.text:SetPoint("BOTTOMLEFT", h, "BOTTOMLEFT", 4, 7)
+  h.text:SetJustifyH("LEFT")
+  h.text:SetTextColor(0.25, 0.148, 0.02)
+  if EJ.font and EJ.font.Set then EJ.font.Set(h.text, EJ.font.MORPHEUS, 15, "", GameFontNormalLarge) end
+  h.rule = h:CreateTexture(nil, "ARTWORK")
+  h.rule:SetTexture(0.25, 0.148, 0.02, 0.45)
+  h.rule:SetHeight(1)
+  h.rule:SetPoint("BOTTOMLEFT", h, "BOTTOMLEFT", 2, 3)
+  h.rule:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", -2, 3)
+  lf.headers[i] = h
+  return h
+end
+
 local function renderLoot(boss, preserveScroll)
   local info = EJ.ej.frame.encounter.info
   local lf = info.content.lootFrame
   local items = boss and boss.loot or {}
+  -- The on-demand repaints pass only { loot = lootSource }; keep the boss id (loot groups) when
+  -- they repaint the same list.
+  local bossID = boss and boss.id
+  if not bossID and items == info.lootSource then bossID = info.lootBossID end
+  info.lootBossID = bossID
   -- Remember the list currently shown so the on-demand repaints (loadLootItem / warmLoot) re-render
   -- THIS view as items resolve — both the boss page and the instance-landing aggregate.
   info.lootSource = items
   -- Difficulty selection is ENCOUNTER-PAGE-WIDE: refreshView owns the bucket list
   -- (per-instance via EJ.ej.InstanceDiffBuckets), the selection default and the dropdown
   -- visibility, BEFORE dispatching here. This renderer only applies the per-row filter.
-  -- Class filter: re-anchor (left of the difficulty filter when it's shown, else the slot filter
-  -- → no gap) and show on the Loot tab. Per-row usability check happens in the loop below.
+  -- Class filter: shown on the Loot tab (position: info.LayoutFilters). Per-row usability check
+  -- happens in the loop below.
   local cls = info.lootClass or "ALL"
   if info.classFilter then
-    info.classFilter:ClearAllPoints()
-    local anchor = (info.difficultyFilter and info.difficultyFilter:IsShown() and info.difficultyFilter)
-                   or info.lootFilter
-    if anchor then info.classFilter:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -6, 0)
-    else info.classFilter:SetPoint("TOPRIGHT", info, "TOPRIGHT", -14, -12) end
-    info.classFilter:SetShown(info.selectedTab == 2)
+    EJ.SetShown(info.classFilter, info.selectedTab == 2)
+    if info.LayoutFilters then info.LayoutFilters() end
   end
 
   local filter = info.lootSlot or "ALL"
@@ -943,12 +1020,25 @@ local function renderLoot(boss, preserveScroll)
   -- (AtlasLoot-style) show immediately; the real icon/link only appear once the client caches the
   -- item. We DON'T background-poll — GetItemInfo already pings the server passively, and a click
   -- on the row (loadLootItem) force-caches + repaints on demand.
+  -- Grouped loot (LootData.lua, per boss): ungrouped rows first, then each group under its own
+  -- sub-header, which only appears when at least one of its rows survives the filters. The
+  -- instance-landing aggregate (no boss id) stays flat.
+  local groupOf = bossID and EJ.ej.LOOT_GROUP and EJ.ej.LOOT_GROUP[bossID]
+  local passes = { { key = false } }
+  if groupOf then
+    for _, g in ipairs(EJ.ej.LOOT_GROUPS or {}) do passes[#passes + 1] = g end
+  end
   local vis, prev, anyUncached, uncached = 0, nil, false, 0
+  local nHead, height, pendingHeader = 0, 0, nil
+  for _, pass in ipairs(passes) do
+  pendingHeader = pass.key and pass.label or nil
   for i = 1, #items do
     if vis >= MAX_LOOT then break end
     -- loot schema is { {id=ITEMID, pct=DROP%, diff=MASK, name=, q=}, ... }; tolerate a bare id too.
     local entry = items[i]
     local isTab = type(entry) == "table"
+    local entryID = isTab and entry.id or entry
+    if ((groupOf and groupOf[entryID]) or false) == pass.key then
     local id  = isTab and entry.id  or entry
     local pct = isTab and entry.pct or 0
     local d   = isTab and entry.diff or 0
@@ -968,12 +1058,24 @@ local function renderLoot(boss, preserveScroll)
     elseif not (name and name ~= "") then
       -- no baked name and not cached yet (rare, ~7 items) → no row until the client resolves it
     elseif filter == "ALL" or lootCategory(equipLoc or "") == filter then
+      if pendingHeader then
+        nHead = nHead + 1
+        local h = lootHeader(lf, nHead)
+        h:ClearAllPoints()
+        if not prev then h:SetPoint("TOPLEFT", lf, "TOPLEFT", 0, 0)
+        else h:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -2) end
+        h.text:SetText(pendingHeader)
+        h:Show()
+        prev, pendingHeader = h, nil
+        height = height + LOOT_HEADER_H + 2
+      end
       vis = vis + 1
       local r = lootRow(lf, vis)
       r:ClearAllPoints()
       if not prev then r:SetPoint("TOPLEFT", lf, "TOPLEFT", 0, 0)
       else r:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -2) end
       prev = r
+      height = height + 47
       r.itemID = id
       r.link = link   -- HandleModifiedItemClick needs the link, not the id, to chat-link/dress-up
       r.bakedName = name
@@ -1004,12 +1106,15 @@ local function renderLoot(boss, preserveScroll)
       r.dropPct:SetText(pct and pct > 0 and string.format("%.1f%%", pct) or "")
       r:Show()
     end
+    end   -- group match
   end
+  end     -- passes
   for i = vis + 1, #lf.rows do lf.rows[i]:Hide() end
-  lf:SetHeight(math.max(1, vis * 47))   -- row 45 + 2 gap; drives the loot scroll range
+  for i = nHead + 1, #(lf.headers or {}) do lf.headers[i]:Hide() end
+  lf:SetHeight(math.max(1, height))   -- rows 45 + 2 gap, headers 30 + 2; drives the loot scroll range
   -- "Load all items" (AtlasLoot's Query Server button) only while something on the page is unloaded.
   local btn = info.content.lootLoadAll
-  if btn and not btn._ejBusy then btn:SetShown(uncached > 0) end
+  if btn and not btn._ejBusy then EJ.SetShown(btn, uncached > 0) end
   -- Reset scroll only when switching into a fresh view; a streaming re-render keeps the
   -- user's place (otherwise every item that arrives would snap the list back to the top).
   if not preserveScroll and lf:GetParent().SetVerticalScroll then lf:GetParent():SetVerticalScroll(0) end
@@ -1022,18 +1127,11 @@ end
 -- On-demand item loader (AtlasLoot-style, triggered by a row CLICK — no background polling). 3.3.5
 -- has no GET_ITEM_INFO_RECEIVED, and the item arrives from the server a moment after the request,
 -- so we do a few SHORT delayed repaints bounded by THIS item resolving (or ~2s), then stop.
--- Issue the server item query for one id. What actually makes 3.3.5a ask the server is a tooltip
--- SetHyperlink("item:<id>") on a hidden GameTooltip — AtlasLoot's exact mechanism (its OnClick
--- does AtlasLootTooltip:SetHyperlink("item:"..id..":0:0:0:0:0:0:0")); ClassicAPI's
--- RequestLoadItemDataByID is added as belt-and-suspenders. The answer lands in the item cache a
--- moment later; there is no event for it on this client, so callers repaint on a timer.
-local function queryItem(itemID)
-  if not itemID then return end
-  safeRequestItem(itemID)
-  EJ_LootScanTip = EJ_LootScanTip or CreateFrame("GameTooltip", "EJ_LootScanTip", nil, "GameTooltipTemplate")
-  EJ_LootScanTip:SetOwner(UIParent, "ANCHOR_NONE")
-  pcall(EJ_LootScanTip.SetHyperlink, EJ_LootScanTip, "item:" .. itemID .. ":0:0:0:0:0:0:0")   -- unknown retail itemIDs can throw
-end
+-- Issue the server item query for one id (EJ.RequestItem, Core/Compat.lua: a hidden-tooltip
+-- SetHyperlink — AtlasLoot's mechanism — plus ClassicAPI's RequestLoadItemDataByID when loaded).
+-- The answer lands in the item cache a moment later; there is no event for it on this client, so
+-- callers repaint on a timer.
+local queryItem = EJ.RequestItem
 
 -- Right-click on a row: query THIS item, then repaint the open loot view a few times (bounded by
 -- the item resolving, or ~2s) so the row fills in as soon as the server answers.
@@ -1045,9 +1143,9 @@ loadLootItem = function(itemID)
     n = n + 1
     local inf = EJ.ej.frame and EJ.ej.frame.encounter and EJ.ej.frame.encounter.info
     if inf and inf.selectedTab == 2 and inf.lootSource then renderLoot({ loot = inf.lootSource }, true) end
-    if n < 6 and not GetItemInfo(itemID) then C_Timer.After(0.3, repaint) end
+    if n < 6 and not GetItemInfo(itemID) then EJ.After(0.3, repaint) end
   end
-  C_Timer.After(0.2, repaint)
+  EJ.After(0.2, repaint)
 end
 
 -- "Load all items": query every unloaded item of the open loot page, one every 0.15s (AtlasLoot's
@@ -1088,7 +1186,7 @@ function EJ.ej.QueryLootPage()
     queryItem(id)
     if btn then btn:SetText(("Loading %d/%d"):format(i, #ids)) end
     if i % 10 == 0 then repaint() end
-    C_Timer.After(0.15, step)
+    EJ.After(0.15, step)
   end
   if btn then btn._ejBusy = true; btn:Disable() end
   step()
@@ -1106,9 +1204,9 @@ warmLoot = function()
     ticks = ticks - 1
     local inf = EJ.ej.frame and EJ.ej.frame.encounter and EJ.ej.frame.encounter.info
     if inf and inf.selectedTab == 2 and inf.lootSource then renderLoot({ loot = inf.lootSource }, true) end
-    if ticks > 0 then C_Timer.After(0.4, tick) else warming = false end
+    if ticks > 0 then EJ.After(0.4, tick) else warming = false end
   end
-  C_Timer.After(0.3, tick)
+  EJ.After(0.3, tick)
 end
 
 -- NOTE: no GET_ITEM_INFO_RECEIVED watcher — that event is MoP+ and NEVER fires on 3.3.5a
@@ -1120,7 +1218,7 @@ end
 -- SetFacing + SetModelScale place it. The 3.3.5 camera is fixed at the origin looking down +X
 -- and the MODEL is moved: larger x = further away (fits bigger creatures); a negative z lowers
 -- the model so its eye-height point centres in the frame; y pans horizontally. Per-boss framing
--- comes from ModelCam.lua's size-fitted MODEL_CAM (cdist≈distance → x, ctz≈eye height → -z);
+-- comes from Models.lua's size-fitted MODEL_CAM (cdist≈distance → x, ctz≈eye height → -z);
 -- MODEL_TWEAKS overrides outliers (live via /ej model) and may give explicit x/y/z/facing/mscale.
 EJ.ej.MODEL_TWEAKS = EJ.ej.MODEL_TWEAKS or {}
 -- Per-display-ID raw MODEL PATH overrides: the boss loads through Model:SetModel(path) instead of
@@ -1141,7 +1239,7 @@ EJ.ej.DEFAULT_MODEL_SCALE = EJ.ej.DEFAULT_MODEL_SCALE or 1   -- global zoom (tun
 
 -- How a boss model is loaded (persisted in EncounterJournalDB.ejModelMode; `/ej model mode <m>`):
 --   "file"    (default) every display the client's own DBC tables map to a creature model file
---             (ModelPaths.lua, non-humanoid) loads that .m2 via Model:SetModel — the ONLY path that
+--             (Models.lua, non-humanoid) loads that .m2 via Model:SetModel — the ONLY path that
 --             has been seen to work on this client (the Kel'Thuzad test). Humanoid displays (a shared
 --             character body dressed via CreatureDisplayInfoExtra) still go through SetDisplayInfo,
 --             since SetModel would show a bare base body.
@@ -1150,7 +1248,7 @@ EJ.ej.DEFAULT_MODEL_SCALE = EJ.ej.DEFAULT_MODEL_SCALE or 1   -- global zoom (tun
 --   "creature" (default) Model:SetCreature(npcID) — the standard 3.3.5 way: the client queries the
 --             creature from the server (like an item) and then renders the display WITH its skin
 --             textures and scale. Needs the npc id (Classic: the encounter id itself; TBC/WotLK:
---             npc_ids.lua from the DBM mods). Empty after the retries → the model file (untextured,
+--             Models.lua from the DBM mods). Empty after the retries → the model file (untextured,
 --             but visible), else SetDisplayInfo.
 EJ.ej.MODEL_MODES = { creature = true, file = true, auto = true, display = true }
 function EJ.ej.ModelMode()
@@ -1160,7 +1258,7 @@ end
 
 -- The npc (creature) id behind an encounter's primary creature, or nil. Classic encounter ids ARE
 -- cmangos npc ids (the extractor keyed them so); TBC/WotLK ids are JournalEncounter ids, resolved
--- through EJ.ej.NPC_ID (npc_ids.lua).
+-- through EJ.ej.NPC_ID (Models.lua).
 function EJ.ej.EncounterNPC(inst, enc)
   if not enc then return nil end
   local t = EJ.ej.NPC_ID and EJ.ej.NPC_ID[enc.id]
@@ -1184,7 +1282,7 @@ function EJ.ej._PlayerModelFallback(ma, displayID)
   -- same table this closure's frame() reads and re-frame without reloading the model.
   local t = EJ.ej.MODEL_TWEAKS[displayID]
   if not t then t = {}; EJ.ej.MODEL_TWEAKS[displayID] = t end
-  local cam = (EJ.ej.MODEL_CAM and EJ.ej.MODEL_CAM[displayID]) or {}   -- per-boss camera (ModelCam.lua)
+  local cam = (EJ.ej.MODEL_CAM and EJ.ej.MODEL_CAM[displayID]) or {}   -- per-boss camera (Models.lua)
   model.facing = t.facing or 0   -- resting rotation; the drag handler updates it from here
 
   local function frame()
@@ -1206,7 +1304,7 @@ function EJ.ej._PlayerModelFallback(ma, displayID)
 
   -- What to load. Precedence:
   --   1. an explicit raw path (tweak `model` from `/ej model path`, else EJ.ej.MODEL_PATH) → SetModel
-  --   2. mode "file": the client's own model file for this display (ModelPaths.lua, non-humanoid)
+  --   2. mode "file": the client's own model file for this display (Models.lua, non-humanoid)
   --      → SetModel, times the display's CreatureModelScale
   --   3. SetDisplayInfo(loadID) (loadID may be redirected by `/ej model display <id>`); in mode
   --      "auto" an empty pane after 0.5s falls back to 2.
@@ -1248,9 +1346,9 @@ function EJ.ej._PlayerModelFallback(ma, displayID)
   -- 3.3.5 has no reliable OnModelLoaded event; re-assert shortly after in case the model
   -- streamed in late (ClassicAPI provides C_Timer). The first load of a session can also race
   -- the client's own data lookup and come back empty — re-issue it once, then give a verdict.
-  if C_Timer and C_Timer.After then
-    C_Timer.After(0.05, frame)
-    C_Timer.After(0.15, function()
+  if EJ.After then
+    EJ.After(0.05, frame)
+    EJ.After(0.15, function()
       if ma._activeDisplayID ~= displayID or ma._userRotated or not model:IsShown() then return end
       load(); frame()
     end)
@@ -1272,14 +1370,14 @@ function EJ.ej._PlayerModelFallback(ma, displayID)
         load(); frame()
       end
     end
-    for _, delay in ipairs({ 0.5, 1.0, 2.0, 3.5, 5.0 }) do C_Timer.After(delay, creatureRetry) end
+    for _, delay in ipairs({ 0.5, 1.0, 2.0, 3.5, 5.0 }) do EJ.After(delay, creatureRetry) end
     local function fallbackToFile()
       path = db.path; ma._dbScale = db.scale or 1; ma._loadSource = "file"
       load(); frame()
-      C_Timer.After(0.3, function()
+      EJ.After(0.3, function()
         if ma._activeDisplayID ~= displayID then return end
         frame()
-        if ma.unavailable then ma.unavailable:SetShown(not loadedOK()) end
+        if ma.unavailable then EJ.SetShown(ma.unavailable, not loadedOK()) end
       end)
     end
     local function verdict()
@@ -1300,17 +1398,17 @@ function EJ.ej._PlayerModelFallback(ma, displayID)
       if not ok and ma._loadSource == "creature" then
         if dbOK then return fallbackToFile() end
         npc = nil; ma._loadSource = "display"; load(); frame()
-        C_Timer.After(0.3, function()
+        EJ.After(0.3, function()
           if ma._activeDisplayID ~= displayID then return end
           frame()
-          if ma.unavailable then ma.unavailable:SetShown(not loadedOK()) end
+          if ma.unavailable then EJ.SetShown(ma.unavailable, not loadedOK()) end
         end)
         return
       end
-      if ma.unavailable then ma.unavailable:SetShown(not ok) end
+      if ma.unavailable then EJ.SetShown(ma.unavailable, not ok) end
     end
     -- display/file/path loads are local → verdict at 0.5s; a creature query waits for the server.
-    C_Timer.After(ma._loadSource == "creature" and 6.5 or 0.5, verdict)
+    EJ.After(ma._loadSource == "creature" and 6.5 or 0.5, verdict)
   end
 end
 
@@ -1493,7 +1591,7 @@ local function paperBand(parent, state, layer)
   b.m:SetHeight(29); b.m:SetPoint("LEFT", b.l, "RIGHT", -32, 0); b.m:SetPoint("RIGHT", b.r, "LEFT", 32, 0)
   return b
 end
-local function bandShown(b, on) b.l:SetShown(on); b.m:SetShown(on); b.r:SetShown(on) end
+local function bandShown(b, on) EJ.SetShown(b.l, on); EJ.SetShown(b.m, on); EJ.SetShown(b.r, on) end
 
 local function acquireSection(c, i)
   local w = c.sectionWidgets[i]
@@ -1680,7 +1778,7 @@ local function layoutSection(w, s, depth, exp)
   w.expandedIcon:SetText(exp and "-" or "+")
   bandShown(w.cBand, not exp); bandShown(w.eBand, exp)
   local showDesc = exp and hasBody
-  w.desc:SetShown(showDesc); w.descBG:SetShown(showDesc); w.descBottom:SetShown(showDesc)
+  EJ.SetShown(w.desc, showDesc); EJ.SetShown(w.descBG, showDesc); EJ.SetShown(w.descBottom, showDesc)
   local h = 28   -- matches hb:SetHeight (taller header band for the larger flag badges)
   if showDesc then h = h + 9 + (w.desc:GetStringHeight() or 0) + 11 + 9 end  -- gap + text + box pad + border
   w:SetHeight(h)
@@ -1706,7 +1804,7 @@ local function renderSections(boss)
   c.leadDesc:SetText(cleanBody(boss.desc))
   c._reflow = function()
     local hasLore = (c.leadDesc:GetText() or "") ~= ""
-    c.leadDesc:SetShown(hasLore)
+    EJ.SetShown(c.leadDesc, hasLore)
     local y = -6
     if hasLore then
       c.leadDesc:ClearAllPoints()
@@ -1766,7 +1864,7 @@ local function refreshView()
   if not selBoss then
     enabled = { [1] = true, [2] = true, [3] = false, [4] = false }
   else
-    enabled = { [1] = true, [2] = true, [3] = false, [4] = true  }
+    enabled = { [1] = true, [2] = true, [3] = false, [4] = EJ.ej.MODEL_TAB_ENABLED and true or false }
   end
 
   local tab = info.selectedTab or 1
@@ -1778,8 +1876,8 @@ local function refreshView()
   for _, t in ipairs(info.tabs) do
     local en = enabled[t.tabID] and true or false
     local on = (t.tabID == tab) and en
-    t.selBG:SetShown(on); t.selIcon:SetShown(on); t.unselIcon:SetShown(not on)
-    t:SetEnabled(en)
+    EJ.SetShown(t.selBG, on); EJ.SetShown(t.selIcon, on); EJ.SetShown(t.unselIcon, not on)
+    EJ.SetEnabled(t, en)
     t.unselIcon:SetDesaturated(not en); t.unselIcon:SetAlpha(en and 1 or 0.35)
     if t.selIcon.SetDesaturated then t.selIcon:SetDesaturated(not en) end
   end
@@ -1792,13 +1890,13 @@ local function refreshView()
   -- header hosts the loot filters, not the boss name) — matching retail.
   local hideBossTitle = (tab == 4 or tab == 2)
   if info.encounterTitle then
-    info.encounterTitle:SetText(selBoss and selBoss.name or "")
-    info.encounterTitle:SetShown(selBoss and not hideBossTitle and true or false)
+    info.SetEncounterTitle(selBoss and selBoss.name or "")
+    EJ.SetShown(info.encounterTitle, selBoss and not hideBossTitle and true or false)
   end
-  if info.rightHeader then info.rightHeader:SetShown(tab ~= 4) end
-  if info.lootFilter then info.lootFilter:SetShown(tab == 2) end   -- slot filter only on Loot
+  if info.rightHeader then EJ.SetShown(info.rightHeader, tab ~= 4) end
+  if info.lootFilter then EJ.SetShown(info.lootFilter, tab == 2) end   -- slot filter only on Loot
   if info.lootFilterClear then   -- clear badge only when there is something to clear
-    info.lootFilterClear:SetShown(tab == 2 and (info.lootSlot or "ALL") ~= "ALL")
+    EJ.SetShown(info.lootFilterClear, tab == 2 and (info.lootSlot or "ALL") ~= "ALL")
   end
   -- ONE difficulty selector for the whole encounter page. Buckets come from the
   -- INSTANCE (cached union of its loot diff masks); the selection drives BOTH the loot bucket
@@ -1814,18 +1912,14 @@ local function refreshView()
     local df = info.difficultyFilter
     if df then
       local show = #avail >= 2 and (tab == 2 or (tab == 1 and selBoss ~= nil))
-      df:SetShown(show and true or false)
-      -- Loot tab: left of the slot filter (its usual spot). Abilities tab: the slot filter is
-      -- hidden, so take its far-right header position instead of floating mid-header.
-      df:ClearAllPoints()
-      if tab == 2 and info.lootFilter then df:SetPoint("TOPRIGHT", info.lootFilter, "TOPLEFT", -6, 0)
-      else df:SetPoint("TOPRIGHT", info, "TOPRIGHT", -14, -12) end
+      EJ.SetShown(df, show and true or false)   -- always the rightmost filter (info.LayoutFilters)
       if info.lootDiff and df.SetDefaultText then
         df:SetDefaultText(EJ.ej.DIFF_LABEL[info.lootDiff] or "")
       end
     end
   end
   if info.classFilter and tab ~= 2 then info.classFilter:Hide() end   -- class filter only on Loot
+  if info.LayoutFilters then info.LayoutFilters() end
 
   if not selBoss then
     if tab == 2 then            -- instance landing Loot = aggregated instance-wide drops
@@ -1928,8 +2022,8 @@ function EJ.ej.PopulateEncounter(inst)
   local lb = enc.instance and enc.instance.lfdButton
   if lb then
     local on = (EJ.lfd and EJ.lfd.Available and EJ.lfd.Available(inst)) and true or false
-    lb:SetShown(on)
-    if lb.text then lb.text:SetShown(on) end
+    EJ.SetShown(lb, on)
+    if lb.text then EJ.SetShown(lb.text, on) end
   end
   fillBossList(inst)
   enc.info.selectedTab = 1
