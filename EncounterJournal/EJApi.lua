@@ -8,8 +8,8 @@
 -- (EJ_GetSectionInfo's 14 returns, EJ_GetEncounterInfo's 8) plus the 7.0+ table forms
 -- (C_EncounterJournal.GetSectionInfo / GetLootInfoByIndex). 3.3.5a specifics:
 --   * No |Hjournal: hyperlinks exist on this client → every `link` return is nil.
---   * ENCOUNTER_START's dungeonEncounterID does not exist in 3.3.5's combat log; the
---     JournalEncounter id is returned in that slot too.
+--   * dungeonEncounterID is the 3.3.5 DungeonEncounter.dbc id (dungeon_encounters.lua; the ids DBM's
+--     SetEncounterID and Details' ENCOUNTER_START use), the normal/10-man row; nil when there is none.
 --   * Difficulty ids are retail's: 1 Normal / 2 Heroic (5-man), 3 10N, 4 25N, 5 10H, 6 25H — the
 --     same numbers the loot `diff` bitmask bits use, so EJ_SetDifficulty filters loot like the window.
 --   * EJ_GetInstanceForMap takes what GetCurrentMapAreaID() returns — on 3.3.5 that is the
@@ -55,10 +55,11 @@ end
 local function nz(v) if v and v ~= 0 then return v end return nil end
 
 -- Lazy indexes over the (static) dataset.
-local byInst, byEnc, bySec, encInst, tierLists, mapToArea
+local byInst, byEnc, bySec, encInst, tierLists, mapToArea, byDungeonEnc
 local function index()
   if byInst then return end
-  byInst, byEnc, bySec, encInst, tierLists = {}, {}, {}, {}, { {}, {}, {} }
+  byInst, byEnc, bySec, encInst, tierLists, byDungeonEnc = {}, {}, {}, {}, { {}, {}, {} }, {}
+  local dbcIds = EJ.ej.DUNGEON_ENCOUNTERS or {}
   for i, inst in ipairs(instances()) do
     byInst[inst.id] = inst
     inst._ejOrder = i   -- data order = the DB2 roster order; keeps the sort below stable
@@ -66,6 +67,9 @@ local function index()
     if tl then tl[#tl + 1] = inst end
     for _, enc in ipairs(inst.encounters or {}) do
       byEnc[enc.id] = enc; encInst[enc.id] = inst
+      local ids = dbcIds[enc.id]
+      enc.dungeonEncounterID = ids and ids[1] or nil
+      for _, d in ipairs(ids or {}) do byDungeonEnc[d] = byDungeonEnc[d] or enc end   -- faction-filtered list, so the player's version wins
       for _, s in ipairs(enc.sections or {}) do bySec[s.id] = s end
     end
   end
@@ -104,9 +108,13 @@ function EJ_SelectTier(i) if TIER[i] then S.tier = i end end
 function EJ_GetCurrentTier() return S.tier or 3 end
 
 -- ── Instances ──────────────────────────────────────────────────────────────────────────────
+-- name, description, bgImage, buttonImage1, loreImage, buttonImage2, dungeonAreaMapID, link,
+-- shouldDisplayDifficulty, mapID, covenantID, isRaid
 local function instanceInfo(inst)
-  return inst.name, inst.desc or "", tex(inst.bgFDID), tex(inst.buttonFDID), tex(inst.loreFDID),
-         (mapToArea and mapToArea[mapOf(inst)]) or 0, nil, (#buckets(inst) >= 2), mapOf(inst), 0
+  local button = tex(inst.buttonFDID)
+  return inst.name, inst.desc or "", tex(inst.bgFDID), button, tex(inst.loreFDID), button,
+         (mapToArea and mapToArea[mapOf(inst)]) or 0, nil, (#buckets(inst) >= 2), mapOf(inst), 0,
+         inst.isRaid and true or false
 end
 function EJ_GetInstanceByIndex(idx, isRaid)
   index()
@@ -162,8 +170,9 @@ function EJ_GetInstanceForZoneName(name)
 end
 
 -- ── Encounters ─────────────────────────────────────────────────────────────────────────────
+-- name, description, journalEncounterID, rootSectionID, link, journalInstanceID, dungeonEncounterID, instanceID
 local function encTuple(enc, inst)
-  return enc.name, enc.desc or "", enc.id, rootSection(enc), nil, inst and inst.id, enc.id, inst and mapOf(inst)
+  return enc.name, enc.desc or "", enc.id, rootSection(enc), nil, inst and inst.id, enc.dungeonEncounterID, inst and mapOf(inst)
 end
 function EJ_GetEncounterInfoByIndex(idx, instanceID)
   index()
@@ -188,6 +197,12 @@ function EJ_SelectEncounter(encID)
   return false
 end
 function EJ_GetCurrentEncounter() return S.encounter end
+-- Not a retail function: DungeonEncounter.dbc id (any difficulty) -> journalEncounterID, journalInstanceID.
+function EJ_GetEncounterForDungeonEncounterID(id)
+  index()
+  local enc = byDungeonEnc[id or 0]
+  if enc then return enc.id, encInst[enc.id] and encInst[enc.id].id end
+end
 
 -- ── Creatures ──────────────────────────────────────────────────────────────────────────────
 -- id, name, description, displayInfo, iconImage, uiModelSceneID

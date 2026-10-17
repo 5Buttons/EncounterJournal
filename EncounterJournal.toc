@@ -36,6 +36,7 @@ EncounterJournal\abilities_seed.lua
 EncounterJournal\LootData.lua
 EncounterJournal\item_info.lua
 EncounterJournal\Models.lua
+EncounterJournal\dungeon_encounters.lua
 EncounterJournal\EJApi.lua
 EncounterJournal\Faction.lua
 EncounterJournal\EncounterJournal.lua

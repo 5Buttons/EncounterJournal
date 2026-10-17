@@ -9,7 +9,7 @@ EJ.worldmap = EJ.worldmap or {}
 -- (The data files' encounter uiMapIDs are RETAIL UiMap ids and mean nothing to this client.)
 function EJ.worldmap.InstanceAreaID(inst)
   if not (inst and inst.id and EJ_GetInstanceInfo) then return 0 end
-  return select(6, EJ_GetInstanceInfo(inst.id)) or 0
+  return select(7, EJ_GetInstanceInfo(inst.id)) or 0
 end
 
 -- Open the world map on an instance's dungeon map. Returns true if a map id was found and applied.
